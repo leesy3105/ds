@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>부동산is 블로그 스튜디오</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  html,body{background:#F7F8FA;font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#1f2330;font-size:16px;}
+  .inp{width:100%;border:1px solid #E2E5EC;border-radius:10px;padding:9px 12px;font-size:15px;background:#fff;outline:none;transition:border .15s, box-shadow .15s;}
+  .inp:focus{border-color:#5B4BDB;box-shadow:0 0 0 3px rgba(91,75,219,.15);}
+  textarea.inp{line-height:1.75;resize:vertical;}
+  .card{background:#fff;border:1px solid #ECEEF3;border-radius:14px;}
+  .btn{display:inline-flex;align-items:center;gap:6px;border-radius:10px;padding:8px 14px;font-size:14px;font-weight:700;transition:all .15s;white-space:nowrap;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn-p{background:#5B4BDB;color:#fff;} .btn-p:hover:not(:disabled){background:#4a3bc6;}
+  .btn-g{background:#22B573;color:#fff;} .btn-g:hover:not(:disabled){background:#1c9c62;}
+  .btn-o{background:#fff;color:#3b3f4a;border:1px solid #E2E5EC;} .btn-o:hover:not(:disabled){border-color:#5B4BDB;color:#5B4BDB;}
+  .btn-s{padding:5px 10px;font-size:13px;border-radius:8px;}
+  .lbl{display:block;font-size:13px;font-weight:700;color:#4b5060;margin-bottom:6px;}
+  .scroll-thin::-webkit-scrollbar{width:8px;height:8px}.scroll-thin::-webkit-scrollbar-thumb{background:#d6d9e0;border-radius:8px}
+  .fade-in{animation:fi .18s ease-out}@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .preview-body{font-size:16px;line-height:1.8;}
+  input[type=range]{accent-color:#5B4BDB}
+  input[type=radio],input[type=checkbox]{accent-color:#5B4BDB}
+</style>
+</head>
+<body>
+<div id="root"><div style="padding:40px;text-align:center;color:#888">블로그 스튜디오를 불러오는 중…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ===================== 공통 유틸 ===================== */
+const LS_KEY = 'llbs-studio-v1';
+const ARCH_KEY = 'llbs-archive-v1';
+const pad = n => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const dot = s => (s || '').replace(/-/g, '.');
+const lsGet = (k, f) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch (e) { return f; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+const uid = () => Math.random().toString(36).slice(2, 9);
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const byteLen = s => { let b = 0; for (const ch of s) b += ch.charCodeAt(0) > 127 ? 2 : 1; return b; };
+const daysSince = ymd => { const t = new Date(ymd + 'T00:00:00'); return isNaN(t) ? 9999 : Math.floor((Date.now() - t.getTime()) / 86400000); };
+
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch (e) {
+    const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (er) {} ta.remove(); return ok;
+  }
+}
+async function copyHtml(html, text) {
+  try {
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' })
+      })]);
+      return true;
+    }
+  } catch (e) {}
+  const d = document.createElement('div'); d.contentEditable = 'true'; d.innerHTML = html;
+  d.style.position = 'fixed'; d.style.left = '-9999px'; d.style.top = '0'; document.body.appendChild(d);
+  const r = document.createRange(); r.selectNodeContents(d); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} s.removeAllRanges(); d.remove(); return ok;
+}
+function download(name, content, type) {
+  try {
+    const blob = content instanceof Blob ? content : new Blob([content], { type });
+    const u = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = u; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000);
+  } catch (e) {}
+}
+
+/* ===================== 아이콘 (lucide 경로) ===================== */
+const ICONS = {
+  pen: 'M12 20h9|M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z',
+  archive: 'M3 3h18v5H3z|M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8|M10 12h4',
+  map: 'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z|M9 3v15|M15 6v15',
+  news: 'M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0V11h4|M18 14h-8|M15 18h-5|M10 6h8v4h-8z',
+  youtube: 'M2.5 17a24 24 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.6 49.6 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24 24 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.6 49.6 0 0 1-16.2 0A2 2 0 0 1 2.5 17|M10 15l5-3-5-3z',
+  search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z|M21 21l-4.3-4.3',
+  copy: 'M8 8h12v12H8z|M4 16V4h12',
+  clip: 'M9 2h6v4H9z|M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2',
+  key: 'M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4',
+  plus: 'M12 5v14|M5 12h14', x: 'M18 6 6 18|M6 6l12 12',
+  trash: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6|M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+  up: 'M12 19V5|M5 12l7-7 7 7', down: 'M12 5v14|M19 12l-7 7-7-7',
+  check: 'M20 6 9 17l-5-5', left: 'M15 18l-6-6 6-6', right: 'M9 18l6-6-6-6',
+  dl: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3',
+  image: 'M3 3h18v18H3z|M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z|M21 15l-5-5L5 21',
+  spark: 'M12 3l1.9 5.8L20 10.7l-5.8 1.9L12 18.5l-1.9-5.9L4 10.7l6.1-1.9z|M19 3v4|M21 5h-4',
+  alert: 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z|M12 9v4|M12 17h.01',
+  menu: 'M4 6h16|M4 12h16|M4 18h16', flame: 'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.2.3 1.5 1.2 2.7 2.5 2.7z',
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M8 13h8|M8 17h8',
+  refresh: 'M21 12a9 9 0 1 1-3-6.7L21 8|M21 3v5h-5', upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12',
+  hash: 'M4 9h16|M4 15h16|M10 3 8 21|M16 3l-2 18', award: 'M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12z|M8.2 13.9 7 22l5-3 5 3-1.2-8.1',
+  user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z|M17 21v-8H7v8|M7 3v5h8',
+  bot: 'M12 8V4H8|M4 8h16v12H4z|M2 14h2|M20 14h2|M15 13v2|M9 13v2', ext: 'M15 3h6v6|M10 14 21 3|M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
+};
+function Icon({ n, s = 16, c = '' }) {
+  return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}>
+    {(ICONS[n] || '').split('|').map((d, i) => <path key={i} d={d} />)}
+  </svg>);
+}
+
+/* ===================== 샘플 데이터 ===================== */
+const AUDIENCES = { '실거주': '내 집 마련·실거주를 준비하는 분', '갭투자': '투자를 검토하는 분', '세무상담': '부동산 세금이 궁금한 분', '정책해설': '정책 변화를 정확히 이해하려는 분' };
+const audLabel = f => f.audience === '직접입력' ? (f.audienceCustom || '독자') : (AUDIENCES[f.audience] || '독자');
+const TONES = ['습니다', '해요', '한다', '과거형'];
+const TONE_LABEL = { '습니다': '~습니다', '해요': '~해요', '한다': '~한다', '과거형': '~과거형' };
+
+const HOT = [
+  { cat: '재건축', topic: '재건축 안전진단 완화, 무엇이 달라지나', kw: ['재건축', '안전진단'], ref: { name: '국토교통부', url: 'https://www.molit.go.kr', summary: '재건축 안전진단(재건축진단) 제도 개편 관련 보도자료. 시행 시점·세부 기준은 [확인 필요: 최신 보도자료]' } },
+  { cat: '금리', topic: '기준금리 결정이 주담대 이자에 미치는 영향', kw: ['기준금리', '주택담보대출'], ref: { name: '한국은행', url: 'https://www.bok.or.kr', summary: '금융통화위원회 통화정책방향 발표. 최근 결정 금리는 [확인 필요: 직전 금통위 결과]' } },
+  { cat: '공시가격', topic: '공동주택 공시가격과 보유세 연관성 정리', kw: ['공시가격', '보유세'], ref: { name: '부동산공시가격알리미', url: 'https://www.realtyprice.kr', summary: '공동주택 공시가격 열람·의견제출 안내. 올해 변동률은 [확인 필요: 공시 발표 자료]' } },
+  { cat: '청약', topic: '분양가 상한제 지역 청약 전략 총정리', kw: ['분양가상한제', '청약'], ref: { name: '청약홈(한국부동산원)', url: 'https://www.applyhome.co.kr', summary: '청약 자격·일정 조회. 적용 지역 목록은 [확인 필요: 국토부 고시]' } },
+  { cat: '대출', topic: '스트레스 DSR 시행과 내 대출 한도 변화', kw: ['스트레스DSR', '대출한도'], ref: { name: '금융위원회', url: 'https://www.fsc.go.kr', summary: '가계부채 관리 방안 및 스트레스 DSR 단계별 적용 안내. 가산금리 수준은 [확인 필요: 최신 보도자료]' } },
+  { cat: '세금', topic: '생애최초 주택 구입 취득세 감면 정리', kw: ['생애최초', '취득세감면'], ref: { name: '위택스(행정안전부)', url: 'https://www.wetax.go.kr', summary: '취득세 감면 요건 안내. 감면 한도·기한은 [확인 필요: 지방세특례제한법 현행 조문]' } },
+  { cat: '전세', topic: '전세사기 예방, 계약 전 꼭 볼 7가지', kw: ['전세사기', '전세계약'], ref: { name: '주택도시보증공사(HUG)', url: 'https://www.khug.or.kr', summary: '안심전세 앱·전세보증금 반환보증 안내 자료' } },
+  { cat: '전세', topic: '전세보증금 반환보증 가입 조건 정리', kw: ['반환보증', '전세보증금'], ref: { name: '주택도시보증공사(HUG)', url: 'https://www.khug.or.kr', summary: '반환보증 가입 요건·보증료 안내. 보증료율은 [확인 필요: HUG 공지]' } },
+  { cat: '세금', topic: '1주택자 양도세 비과세 요건 점검', kw: ['양도세비과세', '1주택자'], ref: { name: '국세청', url: 'https://www.nts.go.kr', summary: '양도소득세 비과세 요건(보유·거주기간) 안내. 고가주택 기준금액은 [확인 필요: 현행 소득세법]' } },
+  { cat: '세금', topic: '종합부동산세 계산 구조 쉽게 이해하기', kw: ['종합부동산세', '종부세'], ref: { name: '국세청', url: 'https://www.nts.go.kr', summary: '종합부동산세 과세표준·세율 구조 안내. 공정시장가액비율은 [확인 필요: 올해 적용 비율]' } },
+  { cat: '대출', topic: '신생아 특례대출 소득 요건과 활용법', kw: ['신생아특례대출', '정책대출'], ref: { name: '주택도시기금', url: 'https://nhuf.molit.go.kr', summary: '신생아 특례 구입·전세자금 대출 상품 안내. 소득·자산 기준은 [확인 필요: 기금 공고]' } },
+  { cat: '대출', topic: '디딤돌·버팀목 대출 조건 한눈에 비교', kw: ['디딤돌대출', '버팀목대출'], ref: { name: '주택도시기금', url: 'https://nhuf.molit.go.kr', summary: '정책 모기지 상품별 대상·한도 안내. 금리는 [확인 필요: 최신 고시 금리]' } },
+  { cat: '규제', topic: '토지거래허가구역 지정·해제 영향 분석', kw: ['토지거래허가구역', '실거주의무'], ref: { name: '국토교통부', url: 'https://www.molit.go.kr', summary: '토지거래허가구역 지정 공고. 대상 지역·기간은 [확인 필요: 지자체 공고]' } },
+  { cat: '시세', topic: '신도시 입주 물량과 전월세 시세 흐름', kw: ['입주물량', '전월세시세'], ref: { name: '한국부동산원', url: 'https://www.reb.or.kr', summary: '주간 아파트 가격 동향·입주 물량 통계. 지역별 수치는 [확인 필요: 최신 주간 동향]' } },
+  { cat: '시세', topic: '아파트 실거래가 조회와 해석 방법', kw: ['실거래가', '아파트시세'], ref: { name: '국토교통부 실거래가 공개시스템', url: 'https://rt.molit.go.kr', summary: '아파트·연립·단독 실거래가 조회 서비스' } },
+  { cat: '재건축', topic: '노후계획도시 특별법 선도지구 이해하기', kw: ['노후계획도시', '선도지구'], ref: { name: '국토교통부', url: 'https://www.molit.go.kr', summary: '노후계획도시 정비 및 지원에 관한 특별법 관련 자료. 선정 일정은 [확인 필요: 최신 발표]' } },
+  { cat: '임대차', topic: '계약갱신청구권 실전 Q&A 총정리', kw: ['계약갱신청구권', '임대차3법'], ref: { name: '국가법령정보센터', url: 'https://www.law.go.kr', summary: '주택임대차보호법 제6조의3(계약갱신 요구 등) 원문' } },
+  { cat: '임대차', topic: '확정일자·전입신고 순서와 효력 정리', kw: ['확정일자', '전입신고'], ref: { name: '정부24', url: 'https://www.gov.kr', summary: '전입신고·확정일자 온라인 신청 안내' } },
+  { cat: '상가', topic: '상가 임대차 권리금 보호 규정 정리', kw: ['상가임대차', '권리금'], ref: { name: '국가법령정보센터', url: 'https://www.law.go.kr', summary: '상가건물 임대차보호법 권리금 회수기회 보호 조항 원문' } },
+  { cat: '경매', topic: '경매 vs 급매, 내 집 마련 비교 가이드', kw: ['부동산경매', '급매'], ref: { name: '대한민국 법원경매정보', url: 'https://www.courtauction.go.kr', summary: '법원 경매 물건 검색·매각 기일 안내' } },
+];
+
+/* ===================== 말투 변환 ===================== */
+const TONE_MAP = {
+  '해요': [['하겠습니다', '할게요'], ['합니다', '해요'], ['입니다', '이에요'], ['있습니다', '있어요'], ['없습니다', '없어요'], ['됩니다', '돼요'], ['드립니다', '드려요'], ['좋습니다', '좋아요'], ['바랍니다', '바라요']],
+  '한다': [['하겠습니다', '하겠다'], ['합니다', '한다'], ['입니다', '이다'], ['있습니다', '있다'], ['없습니다', '없다'], ['됩니다', '된다'], ['드립니다', '드린다'], ['좋습니다', '좋다'], ['바랍니다', '바란다']],
+  '과거형': [['합니다', '했습니다'], ['입니다', '이었습니다'], ['있습니다', '있었습니다'], ['없습니다', '없었습니다'], ['됩니다', '되었습니다'], ['드립니다', '드렸습니다'], ['좋습니다', '좋았습니다']],
+};
+function applyTone(text, tone) {
+  const map = TONE_MAP[tone]; if (!map) return text;
+  return text.split('\n').map(line => {
+    if (line.trim().startsWith('|')) return line;
+    let l = line; map.forEach(([a, b]) => { l = l.replace(new RegExp(a + '(?=[.!,)\\s]|$)', 'g'), b); }); return l;
+  }).join('\n');
+}
+
+/* ===================== 비교표 템플릿 ===================== */
+function compareTable(topic) {
+  const t = topic || '';
+  if (/대출|금리|DSR|모기지/.test(t)) return [['구분', '고정금리형', '변동금리형', '혼합형(주기형)'], ['이자 변동 위험', '낮음', '높음', '중간'], ['초기 금리 수준', '[확인 필요: 은행별 고시]', '[확인 필요: 은행별 고시]', '[확인 필요: 은행별 고시]'], ['이런 분께 적합', '장기 실거주·안정 선호', '단기 보유·금리 하락 기대', '중기 보유·균형 선호'], ['체크 포인트', '중도상환수수료', '금리 상승 시 상환액', '고정 기간 종료 후 조건']];
+  if (/세금|양도|취득|종부|공시|보유세|비과세/.test(t)) return [['구분', '1주택자', '일시적 2주택', '다주택자'], ['핵심 쟁점', '비과세 요건 충족 여부', '처분 기한 준수', '중과·합산 여부'], ['세 부담 수준', '상대적으로 낮음', '요건 충족 시 완화', '상대적으로 높음'], ['꼭 확인할 것', '보유·거주 기간', '종전 주택 처분 기한', '[확인 필요: 현행 중과 규정]']];
+  if (/전세|월세|임대|갱신|확정일자|보증/.test(t)) return [['구분', '전세', '반전세', '월세'], ['초기 목돈', '큼', '중간', '작음'], ['보증금 위험', '상대적으로 큼', '중간', '상대적으로 작음'], ['월 고정비', '거의 없음', '중간', '큼'], ['핵심 대비책', '반환보증·선순위 확인', '보증금 비율 조정', '월세 세액공제 확인']];
+  if (/청약|분양/.test(t)) return [['구분', '청약 당첨', '분양권 매수', '기존 아파트 매매'], ['초기 비용', '계약금 중심', '프리미엄 + 계약금', '매매가 전체'], ['입주 시점', '준공 후', '준공 후', '즉시'], ['주요 리스크', '당첨 불확실성', '전매 제한·프리미엄 변동', '노후도·수리비'], ['적합한 분', '무주택 장기 대기자', '입지 확신·자금 여유', '빠른 입주 필요']];
+  if (/경매|급매/.test(t)) return [['구분', '법원 경매', '급매', '일반 매매'], ['가격 메리트', '높을 수 있음', '중간', '낮음'], ['권리 분석 난이도', '높음', '낮음', '낮음'], ['명도·인도', '직접 필요할 수 있음', '협의', '협의'], ['적합한 분', '권리분석 경험자', '빠른 판단 가능자', '안정 우선']];
+  return [['구분', '신축', '구축', '재건축 예정'], ['초기 매입 비용', '높음', '상대적으로 낮음', '입지·사업 단계별 상이'], ['거주 편의', '우수', '보통(수리 필요 가능)', '낮음(노후)'], ['미래 가치 변수', '입지·수요', '리모델링·관리 상태', '사업 속도·분담금'], ['이런 분께 적합', '바로 입주 실거주', '예산 중심 실거주', '장기 보유 가능자']];
+}
+
+/* ===================== 시뮬레이션 생성 ===================== */
+function simOutline(f) {
+  const kw = f.keywords[0] || f.topic; const aud = audLabel(f);
+  const titles = [
+    f.title || (`${f.topic}, ${aud}이 꼭 알아야 할 핵심 정리`.length <= 40 ? `${f.topic}, ${aud}이 꼭 알아야 할 핵심 정리` : `${f.topic}, 꼭 알아야 할 핵심 정리`),
+    `${kw} 한눈에 보기 | ${f.topic} 체크리스트`,
+    `${f.topic} 총정리, 공인중개사가 짚어 드리는 실전 포인트`,
+  ];
+  const emph = (f.emphasis || []).filter(e => e.on && e.t.trim()).map(e => e.t.trim());
+  return {
+    titles, sel: 0,
+    intro: `${aud}이 ${f.topic} 소식을 접하고 '나에게 어떤 영향이 있을까?'를 고민할 때 읽는 글입니다. 바뀐 내용, 선택지별 차이, 실제 행동 순서를 한 번에 정리합니다.`,
+    sections: [
+      { h: `${f.topic}, 왜 지금 주목해야 할까`, memo: '배경과 변경 사항 요약 · 시행 시점은 공식 발표로 확인' },
+      { h: '핵심 내용과 숫자로 보는 변화', memo: (emph.length ? '강조: ' + emph.join(', ') + ' · ' : '') + '금액·비율·기한은 공식 자료 확인 후 기재' },
+      { h: '선택지 비교: 나에게 유리한 방법은', memo: '비교표 필수 · 3가지 대안의 장단점과 적합 대상' },
+      { h: '현장에서 본 실제 상담 사례', memo: '작성자 경험 메모 반영 (없으면 자리표시)' },
+    ],
+    tips: ['공식 자료에서 최신 기준과 시행일 확인하기', '내 조건(보유 주택 수·소득·자금 계획) 정리하기', '계약·대출 실행 전 전문가와 리스크 점검하기'],
+    conclusion: `${f.topic}은 같은 발표라도 개인 상황에 따라 결과가 달라집니다. 서두르기보다 내 조건을 먼저 확인하는 것이 가장 안전합니다.`,
+    cta: '내 상황에 맞는 판단이 어렵다면 편하게 문의해 주세요. 조건을 함께 정리해 드립니다.',
+    meta: `${f.topic} 핵심 정리. 바뀐 내용, 선택지별 비교표, 단계별 행동 요령과 FAQ까지 ${aud}을 위해 한 번에 정리했습니다.`.slice(0, 160),
+  };
+}
+
+function simBody(f, o) {
+  const date = dot(f.baseDate); const aud = audLabel(f);
+  const k1 = f.keywords[0] || f.topic; const k2 = f.keywords[1] || '';
+  const refs = (f.refs || []).filter(r => r.name);
+  const src = i => refs.length ? `(출처: ${refs[i % refs.length].name}, ${date})` : `(출처: 국토교통부, ${date}) [확인 필요: 출처 원문 링크]`;
+  const secs = o.sections.length ? o.sections : [{ h: f.topic, memo: '' }];
+  const long = f.length === '7000-9000'; const short = f.length === '3000-5000';
+  const emph = (f.emphasis || []).filter(e => e.on && e.t.trim()).map(e => e.t.trim());
+  let tableIdx = secs.findIndex(s => /비교|선택지|대안/.test(s.h + s.memo)); if (tableIdx < 0) tableIdx = Math.min(1, secs.length - 1);
+  let expIdx = secs.findIndex(s => /사례|현장|경험/.test(s.h + s.memo)); if (expIdx < 0) expIdx = secs.length - 1;
+  const L = [];
+  L.push(`정보 기준일: ${date}`, '');
+  L.push(`안녕하세요, ${f.author}입니다.`);
+  L.push(o.intro);
+  L.push(`이 글에서는 **${f.topic}**의 핵심을 ${aud} 입장에서 차례대로 정리합니다.`, '');
+  L.push('[목차]');
+  secs.forEach((s, i) => L.push(`${i + 1}. ${s.h}`));
+  L.push(`${secs.length + 1}. 실전 적용 팁`, `${secs.length + 2}. 자주 묻는 질문`, `${secs.length + 3}. 마무리`, '');
+  secs.forEach((s, i) => {
+    L.push(`■ ${s.h}`);
+    if (i === 0) {
+      L.push(`${f.topic}은 ${k1} 관련 기준이 바뀌거나 시장 반응이 커지면서 문의가 늘어나는 주제입니다.`);
+      L.push(`발표 내용과 시행 시점은 [확인 필요: ${f.topic} 시행일] 공식 발표 기준으로 확인해야 합니다. ${src(0)}`);
+      if (!short) L.push(`특히 **${aud}**은 발표 문구보다 '내 조건에 적용되는지'를 먼저 보는 것이 좋습니다.`);
+    } else if (i === tableIdx) {
+      L.push(`선택지가 여러 개일 때는 한 가지 기준만 보지 말고 비용, 위험, 적합 대상을 함께 비교해야 합니다.`);
+      L.push('');
+      const tb = compareTable(f.topic + ' ' + k1 + ' ' + k2);
+      tb.forEach((r, ri) => { L.push('| ' + r.join(' | ') + ' |'); if (ri === 0) L.push('|' + r.map(() => '---').join('|') + '|'); });
+      L.push('');
+      L.push(`표는 일반적인 경향을 정리한 것입니다. 개별 물건과 개인 상황에 따라 결과는 달라질 수 있습니다. ${src(1)}`);
+    } else if (i === expIdx) {
+      if ((f.experience || '').trim()) {
+        L.push('실제 상담 현장에서 있었던 내용을 정리해 드립니다.');
+        f.experience.trim().split(/\n+/).forEach(p => L.push(p.trim()));
+      } else {
+        L.push('[작성자 경험 입력: 현장 답사일 및 실측 정보]');
+        L.push('[작성자 경험 입력: 실제 상담 사례와 고객 질문]');
+      }
+      L.push(`현장에서 보면 같은 조건처럼 보여도 서류와 일정에서 차이가 생기는 경우가 많습니다.`);
+    } else {
+      L.push(`${s.h}에서 가장 먼저 볼 부분은 ${k1} 관련 기준입니다.`);
+      if (s.memo) L.push(`- 체크 포인트: ${s.memo}`);
+      if (emph.length && i === 1) emph.forEach(e => L.push(`- **${e}**`));
+      L.push(`구체적인 금액·비율·기한은 [확인 필요: ${s.h} 관련 최신 수치] 공식 자료를 기준으로 확인해야 합니다. ${src(i)}`);
+    }
+    if (long) L.push(`${s.h} 부분은 개인별 차이가 큰 만큼, 내 상황을 숫자로 적어 두고 비교해 보시기 바랍니다.`);
+    L.push('');
+  });
+  L.push('■ 실전 적용 팁: 단계별 행동 요령');
+  (o.tips.length ? o.tips : ['공식 자료 확인', '내 조건 정리', '전문가 상담']).forEach((t, i) => L.push(`- ${i + 1}단계: ${t}`));
+  L.push('');
+  L.push('■ 자주 묻는 질문');
+  L.push(`Q. ${f.topic}, 지금 바로 움직여야 하나요?`);
+  L.push(`A. 보유 주택 수와 자금 계획에 따라 판단이 달라집니다. 발표 내용과 내 조건을 먼저 비교한 뒤 결정하는 것이 안전합니다.`);
+  L.push(`Q. 정확한 수치는 어디서 확인하나요?`);
+  L.push(`A. ${refs[0] ? refs[0].name : '국토교통부 등 관계 기관'}의 공식 발표 자료가 가장 정확합니다. 블로그나 커뮤니티 수치는 기준일이 다를 수 있으니 원문을 함께 확인하는 것이 좋습니다.`);
+  L.push(`Q. 상담 전에 무엇을 준비하면 좋을까요?`);
+  L.push(`A. 보유 주택 현황, 대출 잔액, 희망 지역과 예산을 정리해 오시면 됩니다. 준비가 되어 있으면 상담 시간이 짧아지고 결론도 정확해집니다.`);
+  L.push('');
+  L.push(`■ 마무리: ${aud}을 위한 제언`);
+  L.push(o.conclusion);
+  L.push(o.cta);
+  return applyTone(L.join('\n'), f.tone);
+}
+
+/* ===================== 프롬프트 ===================== */
+function briefText(f) {
+  const emph = (f.emphasis || []).filter(e => e.on && e.t.trim()).map(e => e.t.trim());
+  const refs = (f.refs || []).filter(r => r.name || r.url || r.summary);
+  return [
+    `- 작성자: ${f.author}`, `- 주제: ${f.topic}`, `- 희망 제목: ${f.title || '(없음 — SEO 제목 3안 제안)'}`,
+    `- 핵심 키워드: ${f.keywords.join(', ') || '(없음)'}`, `- 강조 내용: ${emph.join(' / ') || '(없음)'}`,
+    `- 말투: ${TONE_LABEL[f.tone]}`, `- 독자 타깃/목적: ${audLabel(f)}`, `- 정보 기준일: ${dot(f.baseDate)}`,
+    `- 목표 분량: 공백 포함 ${f.length.replace('-', '~')}자`,
+    `- 작성자 경험 메모: ${(f.experience || '').trim() || '(없음 — 경험 내용은 지어내지 말 것)'}`,
+    `- 참고 자료:${refs.length ? '\n' + refs.map((r, i) => `  ${i + 1}) ${r.name} ${r.url} — ${r.summary}`).join('\n') : ' (없음)'}`,
+  ].join('\n');
+}
+const RULES = `[작성 원칙]
+1. 네이버 상위노출을 보장한다는 표현은 쓰지 않습니다.
+2. 세금·정책·실거래가 등 검증되지 않은 수치는 지어내지 말고 [확인 필요: 세부 항목]으로 표기합니다.
+3. 경험 메모에 없는 현장 경험은 지어내지 말고 [작성자 경험 입력: 현장 답사일 및 실측 정보]로 남깁니다.
+4. 문장은 짧고 간결하게, 과도한 영업 문구 없이 씁니다.`;
+function outlinePrompt(f) {
+  return `당신은 네이버 블로그 부동산 정보성 콘텐츠·SEO 전략가입니다. 아래 정보로 8구간 아웃라인을 만들어 주세요.
+
+[입력 정보]
+${briefText(f)}
+
+${RULES}
+5. 본문 소제목은 3개 이상이며, 그중 하나는 대안 비교(표) 구간입니다.
+6. 메타 디스크립션은 160자 이내입니다.
+
+[출력 형식] 설명 없이 아래 JSON만 출력하세요.
+{"titles":["SEO 제목1","SEO 제목2","SEO 제목3"],"intro":"도입부 요지(누가, 언제, 왜 읽는가)","sections":[{"h":"소제목","memo":"다룰 핵심 수치·근거 메모"}],"tips":["단계별 행동 요령"],"conclusion":"결론 및 제언","cta":"과하지 않은 상담 안내","meta":"메타 디스크립션"}`;
+}
+const BODY_FORMAT = `[출력 형식 규칙 — 반드시 지킬 것]
+- 첫 줄: 정보 기준일: YYYY.MM.DD
+- 도입부 2~3문단 뒤 [목차] 한 줄, 그 아래 "1. 소제목" 형식 목록
+- 소제목 줄은 "■ 소제목" 형식
+- 대안 비교 표 1개 이상: "| 구분 | A | B | C |" 마크다운 표
+- 강조는 **굵게**, 목록은 "- "로 시작
+- 근거 문장 끝에 (출처: 기관명, YYYY.MM.DD)
+- 글 끝 "■ 자주 묻는 질문" 아래 "Q. 질문" / "A. 답변(2~3문장)" 3세트
+- 마지막에 결론과 과하지 않은 상담 안내
+- 제목·해시태그·설명 등 본문 외 텍스트는 출력하지 말 것`;
+function bodyPrompt(f, o) {
+  const t = o ? o.titles[o.sel] : f.title;
+  const sec = o ? o.sections.map((s, i) => `  ${i + 1}) ${s.h} — ${s.memo}`).join('\n') : '';
+  return `당신은 경력 많은 공인중개사이자 네이버 블로그 정보성 글 작가입니다. 아래 아웃라인으로 블로그 본문을 써 주세요.
+
+[입력 정보]
+${briefText(f)}
+
+[아웃라인]
+① 제목: ${t}
+② 도입부 요지: ${o ? o.intro : ''}
+④ 본문 소제목:
+${sec}
+⑤ 실전 팁: ${o ? o.tips.join(' / ') : ''}
+⑥ 결론: ${o ? o.conclusion : ''}
+⑦ CTA: ${o ? o.cta : ''}
+
+${RULES}
+5. 말투는 '${TONE_LABEL[f.tone]}' 체로 통일합니다.
+
+${BODY_FORMAT}`;
+}
+function improvePrompt(feedback, f, body) {
+  return `아래 네이버 블로그 원고를 피드백에 맞춰 다듬어 주세요. 원고의 구조와 말투('${TONE_LABEL[f.tone]}')는 유지합니다.
+
+[피드백]
+${feedback}
+
+${RULES}
+
+${BODY_FORMAT}
+
+[원고]
+${body}`;
+}
+
+/* ===================== 파싱 ===================== */
+function stripFence(t) { return (t || '').replace(/^```[a-zA-Z]*\s*/m, '').replace(/```\s*$/m, '').trim(); }
+function parseOutline(txt, f) {
+  const s = stripFence(txt); const a = s.indexOf('{'); const b = s.lastIndexOf('}');
+  if (a < 0 || b <= a) return null;
+  let j; try { j = JSON.parse(s.slice(a, b + 1)); } catch (e) { return null; }
+  const base = simOutline(f);
+  const titles = (Array.isArray(j.titles) ? j.titles : [j.title]).filter(Boolean).map(String);
+  while (titles.length < 3) titles.push(base.titles[titles.length]);
+  const sections = (Array.isArray(j.sections) ? j.sections : []).map(x => typeof x === 'string' ? { h: x, memo: '' } : { h: String(x.h || x.title || x.heading || ''), memo: String(x.memo || x.note || x.points || '') })
+    .filter(x => x.h);
+  return {
+    titles: titles.slice(0, 3), sel: 0, intro: String(j.intro || base.intro),
+    sections: sections.length ? sections : base.sections,
+    tips: (Array.isArray(j.tips) ? j.tips : base.tips).map(String),
+    conclusion: String(j.conclusion || base.conclusion), cta: String(j.cta || base.cta), meta: String(j.meta || base.meta),
+  };
+}
+function normalizeBody(txt, f) {
+  let s = stripFence(txt).replace(/\r/g, '');
+  s = s.split('\n').map(l => l.replace(/^#{2,4}\s+/, '■ ').replace(/^■\s*\[?([^\]]*?)\]?$/, (m, g) => '■ ' + g.trim())).filter(l => !/^#\s/.test(l)).join('\n');
+  if (!/정보 기준일/.test(s.split('\n').slice(0, 3).join(''))) s = `정보 기준일: ${dot(f.baseDate)}\n\n` + s;
+  return s.trim();
+}
+
+/* ===================== 렌더링 ===================== */
+const PH_EXP = /\[작성자 경험 입력[^\]]*\]/g;
+const PH_CHK = /\[확인 필요[^\]]*\]/g;
+function inline(s) {
+  let h = esc(s);
+  h = h.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  h = h.replace(PH_EXP, m => `<span style="background:#FFF176;color:#5d4a00;font-weight:700;padding:1px 4px;border-radius:3px;">${m}</span>`);
+  h = h.replace(PH_CHK, m => `<span style="background:#FFE0B2;color:#8a4b00;font-weight:700;padding:1px 4px;border-radius:3px;">${m}</span>`);
+  h = h.replace(/\(출처:[^)]*\)/g, m => `<span style="color:#8a8f98;font-size:13px;">${m}</span>`);
+  return h;
+}
+function tableHtml(rows) {
+  if (!rows.length) return '';
+  const th = 'border:1px solid #D9DCE3;padding:10px 12px;font-size:15px;line-height:1.6;';
+  const head = rows[0].map(c => `<td style="${th}background:#5B4BDB;color:#ffffff;font-weight:700;text-align:center;">${inline(c)}</td>`).join('');
+  const body = rows.slice(1).map((r, ri) => `<tr>${r.map((c, ci) => `<td style="${th}${ci === 0 ? 'background:#F1EFFF;font-weight:700;color:#3a2fa0;' : (ri % 2 ? 'background:#FAFAFC;' : 'background:#ffffff;')}color:${ci === 0 ? '#3a2fa0' : '#333'};">${inline(c)}</td>`).join('')}</tr>`).join('');
+  return `<table border="1" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:6px 0 18px;border:1px solid #D9DCE3;"><tbody><tr>${head}</tr>${body}</tbody></table>`;
+}
+function parseTables(body) {
+  const out = []; let cur = [];
+  (body || '').split('\n').forEach(l => {
+    const t = l.trim();
+    if (t.startsWith('|')) { if (!/^\|[\s:|-]+\|?$/.test(t)) cur.push(t.replace(/^\||\|$/g, '').split('|').map(c => c.trim())); }
+    else if (cur.length) { out.push(cur); cur = []; }
+  });
+  if (cur.length) out.push(cur); return out;
+}
+function bodyToHtml(body, images = [], paste = false) {
+  const lines = (body || '').split('\n'); const out = []; let i = 0; let sec = -1;
+  const P = 'margin:0 0 14px;font-size:16px;line-height:1.8;color:#333;';
+  const imgsFor = k => images.filter(im => Number(im.pos) === k);
+  const imgHtml = im => paste
+    ? `<p style="${P}color:#5B4BDB;font-weight:700;">[사진 삽입 위치: ${esc(im.caption || im.name)}]</p>`
+    : `<figure style="margin:8px 0 18px;"><img src="${im.url}" alt="${esc(im.caption || '')}" style="max-width:100%;border-radius:8px;display:block;margin:0 auto;"/>${im.caption ? `<figcaption style="font-size:13px;color:#888;margin-top:6px;text-align:center;">${esc(im.caption)}</figcaption>` : ''}</figure>`;
+  imgsFor(-1).forEach(im => out.push(imgHtml(im)));
+  while (i < lines.length) {
+    const t = lines[i].trim();
+    if (!t) { i++; continue; }
+    if (t.startsWith('정보 기준일')) { out.push(`<p style="margin:0 0 18px;"><span style="display:inline-block;background:#F1EFFF;color:#5B4BDB;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;">${inline(t)}</span></p>`); i++; continue; }
+    if (/^\[?목차\]?$/.test(t)) {
+      const items = []; i++;
+      while (i < lines.length && lines[i].trim() && /^\d+[.)]/.test(lines[i].trim())) { items.push(lines[i].trim()); i++; }
+      out.push(`<div style="border:1px solid #E3E0FA;background:#FAF9FF;border-radius:10px;padding:16px 20px;margin:0 0 22px;"><p style="margin:0 0 8px;font-weight:800;color:#5B4BDB;font-size:16px;">목차</p>${items.map(x => `<p style="margin:0 0 4px;font-size:15px;color:#444;line-height:1.7;">${inline(x)}</p>`).join('')}</div>`);
+      continue;
+    }
+    if (t.startsWith('■')) { sec++; out.push(`<h3 style="margin:30px 0 14px;font-size:20px;font-weight:800;color:#222;border-left:5px solid #5B4BDB;padding:2px 0 2px 12px;line-height:1.5;">${inline(t)}</h3>`); imgsFor(sec).forEach(im => out.push(imgHtml(im))); i++; continue; }
+    if (t.startsWith('|')) {
+      const rows = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) { const r = lines[i].trim(); if (!/^\|[\s:|-]+\|?$/.test(r)) rows.push(r.replace(/^\||\|$/g, '').split('|').map(c => c.trim())); i++; }
+      out.push(tableHtml(rows)); continue;
+    }
+    if (/^[-•]\s/.test(t)) {
+      const items = [];
+      while (i < lines.length && /^[-•]\s/.test(lines[i].trim())) { items.push(lines[i].trim().replace(/^[-•]\s/, '')); i++; }
+      out.push(`<ul style="margin:0 0 16px;padding-left:22px;">${items.map(x => `<li style="font-size:16px;line-height:1.8;color:#333;margin-bottom:4px;">${inline(x)}</li>`).join('')}</ul>`); continue;
+    }
+    if (/^Q[.:]/.test(t)) { out.push(`<p style="margin:18px 0 6px;font-size:16px;font-weight:800;color:#5B4BDB;line-height:1.7;">${inline(t)}</p>`); i++; continue; }
+    if (/^A[.:]/.test(t)) { out.push(`<p style="${P}background:#F7F8FA;padding:12px 14px;border-radius:8px;">${inline(t)}</p>`); i++; continue; }
+    if (t.startsWith('> ')) { out.push(`<p style="${P}border-left:3px solid #ccc;padding-left:12px;color:#555;">${inline(t.slice(2))}</p>`); i++; continue; }
+    out.push(`<p style="${P}">${inline(t)}</p>`); i++;
+  }
+  return out.join('\n');
+}
+function profileHtml(p) {
+  if (!p || !(p.shop || p.ceo || p.phone)) return '';
+  const row = (k, v) => v ? `<p style="margin:0 0 3px;font-size:14px;color:#444;line-height:1.6;"><b style="color:#5B4BDB;">${k}</b>&nbsp;&nbsp;${esc(v)}</p>` : '';
+  return `<div style="border:1px solid #E3E0FA;border-radius:12px;padding:16px 18px;margin:18px 0;background:#FAF9FF;">
+<p style="margin:0 0 8px;font-size:17px;font-weight:800;color:#222;">${esc(p.shop)}</p>
+${row('대표', p.ceo)}${row('등록번호', p.regNo)}${row('소재지', p.addr)}${row('대표전화', p.phone)}</div>`;
+}
+function fullHtml(body, form, images, paste) {
+  const prof = form.profilePos !== 'none' ? profileHtml(form.profile) : '';
+  return `<div style="font-family:'Noto Sans KR','Malgun Gothic',sans-serif;font-size:16px;line-height:1.8;color:#333;">${form.profilePos === 'top' ? prof : ''}${bodyToHtml(body, images, paste)}${form.profilePos === 'bottom' ? prof : ''}</div>`;
+}
+function toPlain(body) {
+  return (body || '').split('\n').filter(l => !/^\|[\s:|-]+\|?$/.test(l.trim()))
+    .map(l => { const t = l.trim(); if (t.startsWith('|')) return t.replace(/^\||\|$/g, '').split('|').map(c => c.trim()).join(' / '); if (/^\[목차\]$/.test(t)) return '목차'; return l.replace(/\*\*(.+?)\*\*/g, '$1'); })
+    .join('\n');
+}
+function profileText(p) { return [p.shop, p.ceo && '대표 ' + p.ceo, p.regNo && '등록번호 ' + p.regNo, p.addr && '소재지 ' + p.addr, p.phone && '대표전화 ' + p.phone].filter(Boolean).join('\n'); }
+function fullPlain(body, form) {
+  const p = form.profilePos !== 'none' ? profileText(form.profile) : '';
+  return [form.profilePos === 'top' ? p : '', toPlain(body), form.profilePos === 'bottom' ? p : ''].filter(Boolean).join('\n\n');
+}
+function hashtags(f) {
+  const set = [];
+  const add = w => { w = (w || '').replace(/[\s#,.!?·|]/g, ''); if (w && w.length >= 2 && !set.includes(w)) set.push(w); };
+  f.keywords.forEach(add);
+  (f.topic || '').split(/[\s,·]+/).filter(w => w.length >= 2 && w.length <= 8).forEach(add);
+  ['부동산정보', '공인중개사', '부동산상식', '내집마련', '부동산정책', '부동산블로그', '부동산상담', '부동산뉴스', '부동산공부', '부동산팁'].forEach(add);
+  return set.slice(0, 10).map(w => '#' + w);
+}
+
+/* ===================== 이미지 추천 ===================== */
+const EN = [['재건축', 'old apartment redevelopment'], ['안전진단', 'building inspection'], ['금리', 'interest rate'], ['대출', 'mortgage loan'], ['DSR', 'loan calculator'], ['세', 'tax documents calculator'], ['공시', 'property valuation'], ['계약', 'contract signing'], ['전세', 'rental apartment keys'], ['월세', 'rent payment'], ['임대', 'lease agreement'], ['청약', 'new apartment complex'], ['분양', 'apartment construction'], ['신도시', 'new town city skyline'], ['경매', 'auction gavel'], ['상가', 'storefront street'], ['토지', 'land aerial view'], ['비교', 'comparison chart'], ['상담', 'real estate consultation'], ['현장', 'apartment site visit'], ['시세', 'housing price chart'], ['입주', 'moving in boxes'], ['질문', 'question answer'], ['팁', 'checklist']];
+function imgKeywords(h, topic) {
+  const kr = (h + ' ' + topic).replace(/[■:,|]/g, ' ').split(/\s+/).filter(w => w.length >= 2).slice(0, 3).join(' ');
+  const en = []; EN.forEach(([k, v]) => { if ((h + topic).includes(k) && en.length < 2 && !en.includes(v)) en.push(v); });
+  if (!en.length) en.push('korea apartment real estate');
+  return { kr, en: en.join(', '), q: en[0] };
+}
+
+/* ===================== 카드뉴스 SVG ===================== */
+const escX = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function wrap(s, max) {
+  const words = String(s || '').replace(/\*\*/g, '').split(' '); const out = []; let line = '';
+  words.forEach(w => {
+    while (w.length > max) { if (line) { out.push(line); line = ''; } out.push(w.slice(0, max)); w = w.slice(max); }
+    if ((line + ' ' + w).trim().length <= max) line = (line + ' ' + w).trim(); else { out.push(line); line = w; }
+  });
+  if (line) out.push(line); return out;
+}
+const FONT = "'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif";
+function cardSvg({ kind, title, items, table, footer, color }) {
+  const W = 1080, H = 1080; const c = color || '#5B4BDB';
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#F7F8FA"/><rect x="0" y="0" width="${W}" height="250" fill="${c}"/>`;
+  const tl = wrap(title, 17).slice(0, 2);
+  tl.forEach((l, i) => { s += `<text x="70" y="${tl.length === 1 ? 150 : 118 + i * 78}" font-family="${FONT}" font-size="62" font-weight="800" fill="#fff">${escX(l)}</text>`; });
+  if (kind === 'table' && table && table.length) {
+    const rows = table.slice(0, 6); const cols = Math.min(rows[0].length, 4); const x0 = 60, tw = W - 120; const cw = tw / cols;
+    const maxc = Math.max(5, Math.floor(cw / 30)); let y = 300;
+    rows.forEach((r, ri) => {
+      const cells = r.slice(0, cols).map(cx => wrap(cx.replace(/\[확인 필요[^\]]*\]/, '확인 필요'), maxc).slice(0, 3));
+      const lh = 40; const rh = Math.max(...cells.map(x => x.length)) * lh + 30;
+      cells.forEach((lines, ci) => {
+        const fill = ri === 0 ? c : ci === 0 ? '#ECE9FF' : '#fff';
+        s += `<rect x="${x0 + ci * cw}" y="${y}" width="${cw}" height="${rh}" fill="${fill}" stroke="#D9DCE3" stroke-width="2"/>`;
+        lines.forEach((ln, li) => { s += `<text x="${x0 + ci * cw + cw / 2}" y="${y + 44 + li * lh}" text-anchor="middle" font-family="${FONT}" font-size="${ri === 0 ? 30 : 28}" font-weight="${ri === 0 || ci === 0 ? 800 : 500}" fill="${ri === 0 ? '#fff' : ci === 0 ? '#3a2fa0' : '#333'}">${escX(ln)}</text>`; });
+      });
+      y += rh;
+    });
+  } else {
+    let y = 320;
+    (items || []).slice(0, 6).forEach(it => {
+      const lines = wrap(it, 24).slice(0, 2);
+      s += `<circle cx="100" cy="${y + 2}" r="24" fill="#22B573"/><path d="M89 ${y + 2} l8 8 l15 -16" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+      lines.forEach((ln, li) => { s += `<text x="145" y="${y + 14 + li * 50}" font-family="${FONT}" font-size="38" font-weight="${li === 0 ? 700 : 500}" fill="#222">${escX(ln)}</text>`; });
+      y += 40 + lines.length * 50 + 16;
+    });
+  }
+  s += `<line x1="70" y1="990" x2="${W - 70}" y2="990" stroke="#D9DCE3" stroke-width="2"/><text x="70" y="1038" font-family="${FONT}" font-size="28" fill="#6b7080">${escX(footer)}</text></svg>`;
+  return s;
+}
+function svgToPng(svg) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => { const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1080; cv.getContext('2d').drawImage(img, 0, 0);
+      try { const url = cv.toDataURL('image/png'); cv.toBlob(b => res({ url, blob: b }), 'image/png'); } catch (e) { rej(e); } };
+    img.onerror = rej; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+
+/* ===================== 품질 평가 엔진 ===================== */
+const CATS = [
+  ['intent', '검색 의도 및 독자 목적 부합도', 15], ['acc', '정보 정확성 및 출처 명시', 15], ['exp', '전문성 및 현장 독창성', 20],
+  ['table', '심층 비교 분석 및 표 활용', 15], ['read', '제목 매력도 및 구조적 가독성', 10], ['kw', '키워드 자연스러운 배치', 10],
+  ['fresh', '최신성 및 기준일 명시', 5], ['img', '인포그래픽/이미지 배치 구성', 5], ['auth', '진정성 및 상업성/스팸 억제', 5],
+];
+function evaluate({ body, f, o, imgCount, cardMade }) {
+  const text = body || ''; const plain = toPlain(text);
+  const cnt = re => (text.match(re) || []).length;
+  const expPh = cnt(PH_EXP), chkPh = cnt(PH_CHK);
+  const tables = parseTables(text); const tRows = tables.length ? Math.max(...tables.map(t => t.length)) : 0;
+  const headings = cnt(/^■/gm), faq = cnt(/^Q[.:]/gm), srcN = cnt(/\(출처:/g);
+  const first = plain.slice(0, 450); const topicHead = (f.topic || '').slice(0, 5);
+  const sc = {}; const note = {};
+  // 1
+  let s1 = 0; if (topicHead && plain.includes(topicHead)) s1 += 4;
+  if (f.keywords.some(k => first.includes(k))) s1 += 4; else if (topicHead && first.includes(topicHead)) s1 += 2;
+  if (/분|독자|위한|입장|궁금/.test(first)) s1 += 3; s1 += faq >= 3 ? 4 : faq > 0 ? 2 : 0;
+  sc.intent = Math.min(15, s1); note.intent = `FAQ ${faq}개 · 도입부 키워드 ${f.keywords.some(k => first.includes(k)) ? '있음' : '없음'}`;
+  // 2
+  let s2 = srcN >= 3 ? 11 : srcN === 2 ? 9 : srcN === 1 ? 6 : 2;
+  if ((f.refs || []).some(r => r.name)) s2 += 2; if ((f.refs || []).some(r => r.url)) s2 += 2;
+  sc.acc = Math.min(15, s2); note.acc = `출처 표기 ${srcN}건 · 참고자료 ${(f.refs || []).filter(r => r.name).length}건`;
+  // 3
+  const expLen = (f.experience || '').trim().length; let s3 = 6 + (expLen >= 300 ? 8 : expLen >= 80 ? 6 : expLen > 0 ? 3 : 0);
+  if (/공인중개사|중개사무소/.test(text) || (f.author && text.includes(f.author))) s3 += 3;
+  if (/상담|현장|답사|계약|실측/.test(plain)) s3 += 3;
+  sc.exp = Math.min(20, s3); note.exp = `경험 메모 ${expLen}자`;
+  // 4
+  sc.table = tables.length ? (tRows >= 4 ? 15 : 13) : 6; note.table = tables.length ? `비교표 ${tables.length}개 (최대 ${tRows}행)` : '비교표 없음 (-9점)';
+  // 5
+  const title = o ? o.titles[o.sel] : f.title; const tl = (title || '').length;
+  let s5 = (tl >= 15 && tl <= 40 ? 4 : tl ? 2 : 0) + (headings >= 4 ? 3 : headings >= 2 ? 2 : 0);
+  const paras = plain.split('\n').filter(x => x.trim()); const avg = paras.length ? paras.reduce((a, b) => a + b.length, 0) / paras.length : 999;
+  s5 += avg <= 120 ? 3 : avg <= 200 ? 2 : 1;
+  sc.read = Math.min(10, s5); note.read = `제목 ${tl}자 · 소제목 ${headings}개 · 문단 평균 ${Math.round(avg)}자`;
+  // 6
+  let s6;
+  if (!f.keywords.length) { s6 = 4; note.kw = '키워드 미입력'; }
+  else {
+    const per = f.keywords.map(k => { const n = plain.split(k).length - 1; return { k, n, v: n >= 2 && n <= 10 ? 1 : n === 1 ? 0.6 : n > 10 && n <= 15 ? 0.6 : n > 15 ? 0.2 : 0 }; });
+    s6 = Math.round(per.reduce((a, b) => a + b.v, 0) / per.length * 8) + (f.keywords.some(k => (title || '').includes(k)) ? 2 : 0);
+    note.kw = per.map(p => `${p.k} ${p.n}회`).join(' · ');
+  }
+  sc.kw = Math.min(10, s6);
+  // 7
+  const ds = daysSince(f.baseDate);
+  sc.fresh = (/정보 기준일/.test(text) ? 3 : 0) + (ds <= 90 ? 2 : ds <= 365 ? 1 : 0); note.fresh = `기준일 ${dot(f.baseDate)} (${ds}일 전)`;
+  // 8
+  sc.img = Math.min(5, (imgCount >= 3 ? 4 : imgCount === 2 ? 3 : imgCount === 1 ? 2 : 1) + (cardMade ? 1 : 0)); note.img = `사진 ${imgCount}장 · 카드뉴스 ${cardMade ? '생성' : '미생성'}`;
+  // 9
+  const spam = ['무조건', '100%', '상위노출 보장', '대박', '최저가 보장', '절대 손해', '지금 아니면'].filter(w => plain.includes(w)).length;
+  const cta = cnt(/문의|연락 주세요|전화 주세요/g);
+  sc.auth = Math.max(0, 5 - spam * 2 - (cta > 5 ? 1 : 0)); note.auth = `과장 표현 ${spam}건 · 문의 유도 ${cta}회`;
+  const raw = CATS.reduce((a, [k]) => a + sc[k], 0);
+  const ded = expPh * 2 + chkPh; const total = Math.max(0, raw - ded);
+  const grade = total >= 90 ? { t: '발행 권장', c: '#22B573', bg: '#E8F8F0' } : total >= 80 ? { t: '보관/보완 권장', c: '#E8890C', bg: '#FFF4E5' } : { t: '재작성 권장', c: '#E5484D', bg: '#FDECEC' };
+  // 개선 제안
+  const sug = [];
+  if (expPh) sug.push({ t: `작성자 경험 자리표시 ${expPh}건 채우기 (-${expPh * 2}점)`, d: '현장 답사일, 실측 정보, 실제 상담 사례를 직접 입력하면 전문성과 독창성 점수가 크게 오릅니다.', fb: '[작성자 경험 입력] 자리표시 위치에 들어갈 문장 틀을 제안하되, 실제 경험은 지어내지 말고 작성자가 채울 질문 목록으로 남겨 주세요.' });
+  if (chkPh) sug.push({ t: `확인 필요 항목 ${chkPh}건 검증하기 (-${chkPh}점)`, d: '공식 발표·법령 원문에서 수치를 확인해 [확인 필요] 표시를 실제 값과 출처로 바꾸세요.', fb: '[확인 필요] 항목마다 확인해야 할 공식 출처(기관명·자료명)를 괄호로 덧붙이고, 확실하지 않은 수치는 그대로 [확인 필요]로 유지해 주세요.' });
+  const order = CATS.map(([k, name, max]) => ({ k, name, max, r: sc[k] / max })).filter(x => x.r < 1).sort((a, b) => a.r - b.r);
+  const TIP = {
+    intent: ['도입부에 독자와 상황을 분명히', '도입부 첫 2문장에 핵심 키워드와 "누가, 왜 읽는가"를 넣고 FAQ를 3개로 맞추세요.'],
+    acc: ['출처 표기 늘리기', '수치·정책 문장 뒤에 (출처: 기관명, 날짜)를 3건 이상 붙이고 참고자료 URL을 입력하세요.'],
+    exp: ['현장 경험 보강', '경험 메모에 실제 상담·답사 내용을 80자 이상 적고 본문에 반영하세요.'],
+    table: ['비교표 추가·확장', '대안 3가지를 4행 이상 비교하는 표를 넣으세요.'],
+    read: ['제목·구조 다듬기', '제목을 15~40자로 맞추고, 소제목 4개 이상·짧은 문단으로 나누세요.'],
+    kw: ['키워드 배치 조정', '핵심 키워드를 제목에 1회, 본문에 2~10회 자연스럽게 배치하세요.'],
+    fresh: ['기준일 최신화', '정보 기준일을 최근 날짜로 갱신하고 본문 첫 줄에 표기하세요.'],
+    img: ['이미지 구성 보강', '소제목마다 사진을 넣고 카드뉴스를 1장 이상 만들어 첨부하세요.'],
+    auth: ['영업 문구 줄이기', '과장 표현을 빼고 문의 유도는 글 끝 1~2회로 줄이세요.'],
+  };
+  order.forEach(x => { if (sug.length < 3) sug.push({ t: TIP[x.k][0], d: TIP[x.k][1], fb: TIP[x.k][1] }); });
+  return { sc, note, raw, ded, expPh, chkPh, total, grade, sug: sug.slice(0, 3) };
+}
+
+/* ===================== Claude API ===================== */
+async function callClaude(key, model, prompt) {
+  let r;
+  try {
+    r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] }),
+    });
+  } catch (e) { throw new Error('외부 연결이 차단되었어요. Claude 화면 안에서는 API 호출이 막혀 있으니, 저장된 HTML 파일을 브라우저(크롬 등)로 직접 열어 사용하세요.'); }
+  if (!r.ok) { let m = 'HTTP ' + r.status; try { const j = await r.json(); m += ' — ' + ((j.error && j.error.message) || ''); } catch (e) {} throw new Error(m); }
+  const j = await r.json(); return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+}
+
+/* ===================== 기본값 ===================== */
+const defaultForm = () => ({
+  author: '부동산이즈 경주역신도시부동산 이선예 공인중개사', topic: '', title: '', keywords: [],
+  emphasis: [{ t: '핵심 변경 사항을 쉽게 정리', on: true }, { t: '실수요자 체크리스트 제공', on: true }],
+  tone: '습니다', experience: '', refs: [], baseDate: today(), audience: '실거주', audienceCustom: '', length: '5000-7000',
+  profilePos: 'bottom',
+  profile: { shop: '부동산이즈경주역신도시부동산공인중개사사무소', regNo: '47130-2017-00023', ceo: '이선예', addr: '경주시 건천읍 경주역세권1로90, 상가132동 201호 (신경주유보라104동앞)', phone: '054-776-3654 / 010-4176-3654' },
+});
+
+const OLD_AUTHORS = ['', '경주역신도시부동산 이선예 공인중개사'];
+const fixAuthor = a => OLD_AUTHORS.includes((a || '').trim()) ? defaultForm().author : a;
+const OLD_SHOPS = ['', '경주역신도시부동산 공인중개사사무소'];
+const OLD_ADDRS = ['', '경주역 신도시 신경주유보라 104동 앞'];
+function migrateProfile(p) {
+  const d = defaultForm().profile; const m = { ...d, ...(p || {}) };
+  if (OLD_SHOPS.includes((m.shop || '').trim())) m.shop = d.shop;
+  if (OLD_ADDRS.includes((m.addr || '').trim())) m.addr = d.addr;
+  if (!(m.regNo || '').trim()) m.regNo = d.regNo;
+  if (!(m.ceo || '').trim()) m.ceo = d.ceo;
+  return m;
+}
+
+/* ===================== 작은 컴포넌트 ===================== */
+function Modal({ title, onClose, children, wide, footer }) {
+  return (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`card shadow-2xl w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[92vh] flex flex-col fade-in`}>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-[#ECEEF3]">
+        <h3 className="font-extrabold text-[17px]">{title}</h3>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><Icon n="x" s={18} /></button>
+      </div>
+      <div className="p-5 overflow-y-auto scroll-thin">{children}</div>
+      {footer && <div className="px-5 py-3 border-t border-[#ECEEF3] flex flex-wrap justify-end gap-2">{footer}</div>}
+    </div>
+  </div>);
+}
+function Field({ label, hint, children, right }) {
+  return (<div className="mb-4"><div className="flex items-end justify-between"><label className="lbl">{label}</label>{right && <span className="text-xs text-gray-400 mb-1.5">{right}</span>}</div>{children}{hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}</div>);
+}
+function GenButtons({ label, onSim, onPaste, onApi, busy, apiReady, disabled }) {
+  return (<div className="card p-4 bg-[#FAF9FF] border-[#E3E0FA]">
+    <p className="text-sm font-extrabold text-[#5B4BDB] mb-3 flex items-center gap-1.5"><Icon n="spark" />{label}</p>
+    <div className="grid sm:grid-cols-3 gap-2">
+      <button className="btn btn-p justify-center" disabled={disabled || !!busy} onClick={onSim}><Icon n="spark" />샘플로 즉시 생성</button>
+      <button className="btn btn-o justify-center" disabled={disabled || !!busy} onClick={onPaste}><Icon n="clip" />프롬프트 복사·붙여넣기</button>
+      <button className="btn btn-o justify-center" disabled={disabled || !!busy} onClick={onApi}>{busy ? <span className="animate-pulse">생성 중…</span> : <><Icon n="bot" />Claude API{apiReady ? '' : ' (키 필요)'}</>}</button>
+    </div>
+  </div>);
+}
+function TagInput({ tags, onChange, max = 10 }) {
+  const [v, setV] = useState('');
+  const add = raw => {
+    const parts = raw.split(',').map(s => s.trim()).filter(Boolean); let next = [...tags];
+    parts.forEach(p => { if (next.length < max && !next.includes(p)) next.push(p.slice(0, 20)); });
+    onChange(next); setV('');
+  };
+  return (<div className="inp flex flex-wrap gap-1.5 items-center min-h-[44px]">
+    {tags.map(t => (<span key={t} className="inline-flex items-center gap-1 bg-[#F1EFFF] text-[#5B4BDB] text-sm font-bold rounded-full pl-3 pr-1.5 py-0.5">#{t}<button onClick={() => onChange(tags.filter(x => x !== t))} className="hover:bg-white rounded-full p-0.5"><Icon n="x" s={12} /></button></span>))}
+    {tags.length < max && <input value={v} onChange={e => { if (e.target.value.endsWith(',')) add(e.target.value); else setV(e.target.value); }}
+      onKeyDown={e => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); if (v.trim()) add(v); } if (e.key === 'Backspace' && !v && tags.length) onChange(tags.slice(0, -1)); }}
+      onBlur={() => v.trim() && add(v)} placeholder={tags.length ? '' : '키워드 입력 후 Enter 또는 쉼표'} className="flex-1 min-w-[140px] outline-none text-[15px] bg-transparent" />}
+  </div>);
+}
+function ListEditor({ items, onChange, checkable, placeholder }) {
+  const get = it => checkable ? it.t : it;
+  const set = (i, val) => { const n = [...items]; n[i] = checkable ? { ...n[i], t: val } : val; onChange(n); };
+  const move = (i, d) => { const j = i + d; if (j < 0 || j >= items.length) return; const n = [...items]; [n[i], n[j]] = [n[j], n[i]]; onChange(n); };
+  return (<div className="space-y-2">
+    {items.map((it, i) => (<div key={i} className="flex items-center gap-2">
+      {checkable ? <input type="checkbox" checked={it.on} onChange={e => { const n = [...items]; n[i] = { ...it, on: e.target.checked }; onChange(n); }} className="w-4 h-4" /> : <span className="w-2 h-2 rounded-full bg-[#5B4BDB] shrink-0" />}
+      <input className="inp !py-2" value={get(it)} onChange={e => set(i, e.target.value)} placeholder={placeholder} />
+      <button className="p-1.5 text-gray-400 hover:text-[#5B4BDB]" onClick={() => move(i, -1)} title="위로"><Icon n="up" s={14} /></button>
+      <button className="p-1.5 text-gray-400 hover:text-[#5B4BDB]" onClick={() => move(i, 1)} title="아래로"><Icon n="down" s={14} /></button>
+      <button className="p-1.5 text-gray-400 hover:text-red-500" onClick={() => onChange(items.filter((_, k) => k !== i))} title="삭제"><Icon n="trash" s={14} /></button>
+    </div>))}
+    <button className="btn btn-o btn-s" onClick={() => onChange([...items, checkable ? { t: '', on: true } : ''])}><Icon n="plus" s={14} />항목 추가</button>
+  </div>);
+}
+
+/* ===================== Step 1 ===================== */
+function Step1({ form, setForm, onGen, busy, apiReady, notify }) {
+  const [tab, setTab] = useState('direct');
+  const [cat, setCat] = useState('전체');
+  const up = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const upP = (k, v) => setForm(f => ({ ...f, profile: { ...f.profile, [k]: v } }));
+  const pickHot = h => {
+    setForm(f => {
+      const refs = [...f.refs]; if (refs.length < 5 && !refs.some(r => r.url === h.ref.url && r.name === h.ref.name)) refs.push({ ...h.ref });
+      const kws = [...f.keywords]; h.kw.forEach(k => { if (kws.length < 10 && !kws.includes(k)) kws.push(k); });
+      return { ...f, topic: h.topic.slice(0, 30), refs, keywords: kws };
+    });
+    setTab('direct'); notify('주제·키워드·참고자료가 입력되었어요');
+  };
+  const cats = ['전체', ...Array.from(new Set(HOT.map(h => h.cat)))];
+  const emph = form.emphasis.filter(e => e.on && e.t.trim());
+  return (<div className="grid lg:grid-cols-5 gap-5">
+    <div className="lg:col-span-2 space-y-4">
+      <div className="flex gap-1 bg-white border border-[#ECEEF3] rounded-xl p-1">
+        <button onClick={() => setTab('direct')} className={`flex-1 py-2 rounded-lg text-sm font-bold ${tab === 'direct' ? 'bg-[#5B4BDB] text-white' : 'text-gray-500'}`}>직접 입력</button>
+        <button onClick={() => setTab('hot')} className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 ${tab === 'hot' ? 'bg-[#5B4BDB] text-white' : 'text-gray-500'}`}><Icon n="flame" s={14} />오늘의 부동산 핫이슈 TOP 20</button>
+      </div>
+      {tab === 'hot' ? (<div className="card p-4">
+        <p className="text-xs text-gray-500 mb-3 leading-relaxed">자주 문의가 들어오는 이슈를 모은 <b>샘플 피드</b>입니다. 실시간 뉴스가 아니므로 클릭 후 참고자료의 [확인 필요] 부분은 최신 발표로 꼭 확인하세요.</p>
+        <div className="flex flex-wrap gap-1.5 mb-3">{cats.map(c => <button key={c} onClick={() => setCat(c)} className={`px-2.5 py-1 rounded-full text-xs font-bold border ${cat === c ? 'bg-[#5B4BDB] text-white border-[#5B4BDB]' : 'bg-white text-gray-500 border-[#E2E5EC]'}`}>{c}</button>)}</div>
+        <ol className="space-y-1.5">
+          {HOT.map((h, i) => ({ h, i })).filter(x => cat === '전체' || x.h.cat === cat).map(({ h, i }) => (
+            <li key={i}><button onClick={() => pickHot(h)} className="w-full text-left flex gap-3 items-start p-2.5 rounded-lg hover:bg-[#F7F6FF] border border-transparent hover:border-[#E3E0FA]">
+              <span className={`w-6 h-6 shrink-0 rounded-md text-xs font-extrabold flex items-center justify-center ${i < 3 ? 'bg-[#5B4BDB] text-white' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
+              <span className="flex-1"><span className="block text-[15px] font-bold text-gray-800">{h.topic}</span><span className="text-xs text-gray-400">{h.cat} · {h.ref.name}</span></span>
+              <Icon n="plus" s={16} c="text-[#5B4BDB] mt-1" />
+            </button></li>))}
+        </ol>
+      </div>) : (<div className="card p-5">
+        <Field label="작성자명" right={`${form.author.length}/30`}><input className="inp" maxLength={30} value={form.author} onChange={e => up('author', e.target.value)} /></Field>
+        <Field label="주제 *" right={`${form.topic.length}/30`}><input className="inp" maxLength={30} value={form.topic} onChange={e => up('topic', e.target.value)} placeholder="예: 경주역 신도시 전세 계약 전 체크리스트" /></Field>
+        <Field label="블로그 제목 (선택)" hint="비워 두면 Step 2에서 SEO 추천 제목 3안을 제안합니다."><input className="inp" value={form.title} onChange={e => up('title', e.target.value)} /></Field>
+        <Field label="핵심 키워드 태그" right={`${form.keywords.length}/10`}><TagInput tags={form.keywords} onChange={v => up('keywords', v)} /></Field>
+        <Field label="강조하고 싶은 내용" hint="체크된 항목만 원고에 반영됩니다."><ListEditor items={form.emphasis} onChange={v => up('emphasis', v)} checkable placeholder="강조할 내용" /></Field>
+        <Field label="말투"><div className="grid grid-cols-4 gap-1.5">{TONES.map(t => (<label key={t} className={`cursor-pointer text-center py-2 rounded-lg border text-sm font-bold ${form.tone === t ? 'border-[#5B4BDB] bg-[#F1EFFF] text-[#5B4BDB]' : 'border-[#E2E5EC] text-gray-500'}`}><input type="radio" className="hidden" checked={form.tone === t} onChange={() => up('tone', t)} />{TONE_LABEL[t]}</label>))}</div></Field>
+        <Field label="독자 타깃 및 목적"><div className="flex flex-wrap gap-1.5">{[...Object.keys(AUDIENCES), '직접입력'].map(a => (<label key={a} className={`cursor-pointer px-3 py-1.5 rounded-lg border text-sm font-bold ${form.audience === a ? 'border-[#5B4BDB] bg-[#F1EFFF] text-[#5B4BDB]' : 'border-[#E2E5EC] text-gray-500'}`}><input type="radio" className="hidden" checked={form.audience === a} onChange={() => up('audience', a)} />{a === '직접입력' ? '직접 입력' : a}</label>))}</div>
+          {form.audience === '직접입력' && <input className="inp mt-2" value={form.audienceCustom} onChange={e => up('audienceCustom', e.target.value)} placeholder="예: 신혼부부 첫 집 마련" />}</Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="정보 기준일"><input type="date" className="inp" value={form.baseDate} onChange={e => up('baseDate', e.target.value)} /></Field>
+          <Field label="목표 원고 분량"><select className="inp" value={form.length} onChange={e => up('length', e.target.value)}><option value="3000-5000">3,000~5,000자</option><option value="5000-7000">5,000~7,000자 (기본)</option><option value="7000-9000">7,000~9,000자</option></select></Field>
+        </div>
+        <Field label="직접 경험 메모" right={`${form.experience.length}/2000`} hint="현장 답사, 상담 사례 등. 비워 두면 본문에 노란색 [작성자 경험 입력] 자리표시가 남습니다."><textarea className="inp" rows={4} maxLength={2000} value={form.experience} onChange={e => up('experience', e.target.value)} placeholder="예: 11월 초 신경주역 인근 단지 답사, 전용 84㎡ 남향 동 위주로 문의 많음…" /></Field>
+        <Field label="참고 자료" right={`${form.refs.length}/5`}>
+          <div className="space-y-2">{form.refs.map((r, i) => (<div key={i} className="border border-[#ECEEF3] rounded-lg p-2.5 space-y-1.5 bg-[#FBFBFD]">
+            <div className="flex gap-1.5"><input className="inp !py-1.5" placeholder="출처명" value={r.name} onChange={e => { const n = [...form.refs]; n[i] = { ...r, name: e.target.value }; up('refs', n); }} />
+              <button className="p-1.5 text-gray-400 hover:text-red-500" onClick={() => up('refs', form.refs.filter((_, k) => k !== i))}><Icon n="trash" s={15} /></button></div>
+            <input className="inp !py-1.5" placeholder="URL" value={r.url} onChange={e => { const n = [...form.refs]; n[i] = { ...r, url: e.target.value }; up('refs', n); }} />
+            <textarea className="inp !py-1.5" rows={2} placeholder="요약 내용" value={r.summary} onChange={e => { const n = [...form.refs]; n[i] = { ...r, summary: e.target.value }; up('refs', n); }} />
+          </div>))}
+            {form.refs.length < 5 && <button className="btn btn-o btn-s" onClick={() => up('refs', [...form.refs, { name: '', url: '', summary: '' }])}><Icon n="plus" s={14} />참고 자료 추가</button>}</div>
+        </Field>
+        <div className="border-t border-[#ECEEF3] pt-4 mt-2">
+          <Field label="공인중개사 명함/프로필 표시"><div className="flex gap-1.5">{[['top', '글 상단'], ['bottom', '글 하단'], ['none', '미표시']].map(([v, l]) => (<label key={v} className={`cursor-pointer flex-1 text-center py-1.5 rounded-lg border text-sm font-bold ${form.profilePos === v ? 'border-[#5B4BDB] bg-[#F1EFFF] text-[#5B4BDB]' : 'border-[#E2E5EC] text-gray-500'}`}><input type="radio" className="hidden" checked={form.profilePos === v} onChange={() => up('profilePos', v)} />{l}</label>))}</div></Field>
+          {form.profilePos !== 'none' && <div className="grid grid-cols-2 gap-2">
+            <input className="inp col-span-2" placeholder="상호명" value={form.profile.shop} onChange={e => upP('shop', e.target.value)} />
+            <input className="inp" placeholder="대표자명" value={form.profile.ceo} onChange={e => upP('ceo', e.target.value)} />
+            <input className="inp" placeholder="등록번호" value={form.profile.regNo} onChange={e => upP('regNo', e.target.value)} />
+            <input className="inp col-span-2" placeholder="소재지" value={form.profile.addr} onChange={e => upP('addr', e.target.value)} />
+            <input className="inp col-span-2" placeholder="대표 전화번호" value={form.profile.phone} onChange={e => upP('phone', e.target.value)} />
+          </div>}
+        </div>
+      </div>)}
+    </div>
+    <div className="lg:col-span-3 space-y-4">
+      <div className="card p-5 lg:sticky lg:top-4">
+        <p className="text-xs font-extrabold text-[#5B4BDB] mb-1">실시간 작성 브리프</p>
+        <h2 className="text-xl font-extrabold mb-4 leading-snug">{form.title || form.topic || '주제를 입력하거나 핫이슈를 선택하세요'}</h2>
+        <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-[15px]">
+          {[['작성자', form.author], ['독자', audLabel(form)], ['말투', TONE_LABEL[form.tone]], ['기준일', dot(form.baseDate)], ['분량', form.length.replace('-', '~') + '자'], ['참고자료', form.refs.filter(r => r.name).map(r => r.name).join(', ') || '없음']].map(([k, v]) => (<div key={k}><dt className="text-xs text-gray-400">{k}</dt><dd className="font-bold text-gray-700 break-keep">{v}</dd></div>))}
+        </dl>
+        {form.keywords.length > 0 && <div className="flex flex-wrap gap-1.5 mt-4">{form.keywords.map(k => <span key={k} className="text-xs font-bold bg-[#F1EFFF] text-[#5B4BDB] px-2 py-0.5 rounded-full">#{k}</span>)}</div>}
+        {emph.length > 0 && <ul className="mt-4 space-y-1">{emph.map((e, i) => <li key={i} className="text-sm flex gap-2 items-start"><Icon n="check" s={15} c="text-[#22B573] mt-1 shrink-0" />{e.t}</li>)}</ul>}
+        <div className={`mt-4 text-sm rounded-lg p-3 ${form.experience.trim() ? 'bg-[#E8F8F0] text-[#16774b]' : 'bg-[#FFF8D6] text-[#7a6200]'}`}>
+          {form.experience.trim() ? `경험 메모 ${form.experience.trim().length}자가 본문에 반영됩니다.` : '경험 메모가 비어 있어 본문에 [작성자 경험 입력] 자리표시가 생깁니다. (1건당 품질 점수 -2점)'}
+        </div>
+        {form.profilePos !== 'none' && <div className="mt-2" dangerouslySetInnerHTML={{ __html: profileHtml(form.profile) }} />}
+        <div className="mt-4"><GenButtons label="Step 2 아웃라인 만들기" disabled={!form.topic.trim()} busy={busy === 'outline'} apiReady={apiReady}
+          onSim={() => onGen('outline', 'sim')} onPaste={() => onGen('outline', 'paste')} onApi={() => onGen('outline', 'api')} />
+          {!form.topic.trim() && <p className="text-xs text-red-500 mt-2">주제를 입력해야 다음 단계로 갈 수 있어요.</p>}</div>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ===================== Step 2 ===================== */
+const NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'];
+function Step2({ form, outline, setOutline, onGen, busy, apiReady, back }) {
+  if (!outline) return <div className="card p-10 text-center text-gray-500">아직 아웃라인이 없어요. <button className="text-[#5B4BDB] font-bold" onClick={back}>Step 1로 돌아가기</button></div>;
+  const up = (k, v) => setOutline(o => ({ ...o, [k]: v }));
+  const setSec = (i, k, v) => setOutline(o => { const s = [...o.sections]; s[i] = { ...s[i], [k]: v }; return { ...o, sections: s }; });
+  const moveSec = (i, d) => setOutline(o => { const j = i + d; if (j < 0 || j >= o.sections.length) return o; const s = [...o.sections]; [s[i], s[j]] = [s[j], s[i]]; return { ...o, sections: s }; });
+  const toc = [...outline.sections.map(s => s.h), '실전 적용 팁', '자주 묻는 질문', '마무리'];
+  return (<div className="grid lg:grid-cols-5 gap-5">
+    <div className="lg:col-span-2 space-y-4">
+      <div className="card p-5">
+        <Field label="① SEO 제목 (추천 3안 중 선택·수정)">{outline.titles.map((t, i) => (<label key={i} className={`flex items-center gap-2 mb-2 p-2 rounded-lg border ${outline.sel === i ? 'border-[#5B4BDB] bg-[#FAF9FF]' : 'border-[#ECEEF3]'}`}>
+          <input type="radio" checked={outline.sel === i} onChange={() => up('sel', i)} />
+          <input className="flex-1 outline-none bg-transparent text-[15px] font-bold" value={t} onChange={e => { const n = [...outline.titles]; n[i] = e.target.value; up('titles', n); }} />
+          <span className={`text-xs ${t.length > 40 ? 'text-red-500' : 'text-gray-400'}`}>{t.length}자</span></label>))}</Field>
+        <Field label="② 도입부 요지 (누가, 언제, 왜 읽는가)"><textarea className="inp" rows={3} value={outline.intro} onChange={e => up('intro', e.target.value)} /></Field>
+        <Field label="④ 본문 소제목" hint={outline.sections.length < 3 ? '⚠ 소제목은 3개 이상 필요합니다.' : '순서 변경·추가·삭제가 가능합니다. 비교표 구간에는 "비교"라는 단어를 넣어 주세요.'}>
+          <div className="space-y-2">{outline.sections.map((s, i) => (<div key={i} className="border border-[#ECEEF3] rounded-lg p-2.5 bg-[#FBFBFD]">
+            <div className="flex items-center gap-1.5 mb-1.5"><span className="text-xs font-extrabold text-[#5B4BDB] w-5">{i + 1}</span>
+              <input className="inp !py-1.5 font-bold" value={s.h} onChange={e => setSec(i, 'h', e.target.value)} />
+              <button className="p-1 text-gray-400 hover:text-[#5B4BDB]" onClick={() => moveSec(i, -1)}><Icon n="up" s={14} /></button>
+              <button className="p-1 text-gray-400 hover:text-[#5B4BDB]" onClick={() => moveSec(i, 1)}><Icon n="down" s={14} /></button>
+              <button className="p-1 text-gray-400 hover:text-red-500" onClick={() => up('sections', outline.sections.filter((_, k) => k !== i))}><Icon n="trash" s={14} /></button></div>
+            <textarea className="inp !py-1.5 text-sm" rows={2} placeholder="다룰 핵심 수치 및 근거 메모" value={s.memo} onChange={e => setSec(i, 'memo', e.target.value)} /></div>))}
+            <button className="btn btn-o btn-s" onClick={() => up('sections', [...outline.sections, { h: '새 소제목', memo: '' }])}><Icon n="plus" s={14} />소제목 추가</button></div></Field>
+        <Field label="⑤ 실전 적용 팁 / 단계별 행동 요령"><ListEditor items={outline.tips} onChange={v => up('tips', v)} placeholder="행동 요령" /></Field>
+        <Field label="⑥ 결론 및 제언"><textarea className="inp" rows={3} value={outline.conclusion} onChange={e => up('conclusion', e.target.value)} /></Field>
+        <Field label="⑦ 문의 유도 CTA"><textarea className="inp" rows={2} value={outline.cta} onChange={e => up('cta', e.target.value)} /></Field>
+        <Field label="⑧ 메타 디스크립션" right={<span className={outline.meta.length > 160 ? 'text-red-500 font-bold' : ''}>{outline.meta.length}/160</span>}><textarea className="inp" rows={3} value={outline.meta} onChange={e => up('meta', e.target.value)} /></Field>
+      </div>
+      <GenButtons label="아웃라인 다시 생성" busy={busy === 'outline'} apiReady={apiReady} onSim={() => onGen('outline', 'sim')} onPaste={() => onGen('outline', 'paste')} onApi={() => onGen('outline', 'api')} />
+    </div>
+    <div className="lg:col-span-3 space-y-4">
+      <div className="card p-5">
+        <p className="text-xs font-extrabold text-[#5B4BDB] mb-3">8구간 아웃라인 미리보기</p>
+        <div className="space-y-3">
+          {[
+            ['SEO 제목', <p className="text-lg font-extrabold">{outline.titles[outline.sel]}</p>],
+            ['도입부 요지', <p>{outline.intro}</p>],
+            ['목차', <ol className="list-decimal pl-5">{toc.map((t, i) => <li key={i}>{t}</li>)}</ol>],
+            ['본문 소제목', <div className="space-y-2">{outline.sections.map((s, i) => <div key={i}><p className="font-bold">■ {s.h} {/비교|선택지|대안/.test(s.h + s.memo) && <span className="text-[11px] bg-[#E8F8F0] text-[#16774b] px-1.5 py-0.5 rounded ml-1">비교표</span>}</p><p className="text-sm text-gray-500">{s.memo}</p></div>)}</div>],
+            ['실전 적용 팁', <ul className="space-y-1">{outline.tips.map((t, i) => <li key={i} className="flex gap-2"><span className="font-bold text-[#22B573]">{i + 1}단계</span>{t}</li>)}</ul>],
+            ['결론 및 제언', <p>{outline.conclusion}</p>],
+            ['문의 유도 CTA', <p>{outline.cta}</p>],
+            ['메타 디스크립션', <p className="text-sm bg-[#F7F8FA] rounded-lg p-3"><span className="text-[#1a0dab] font-bold block">{outline.titles[outline.sel]}</span>{outline.meta}</p>],
+          ].map(([k, v], i) => (<div key={k} className="flex gap-3 leading-relaxed"><span className="text-[#5B4BDB] text-xl font-extrabold w-7 shrink-0">{NUM[i]}</span><div className="flex-1 border-b border-dashed border-[#ECEEF3] pb-3"><p className="text-xs font-bold text-gray-400 mb-1">{k}</p>{v}</div></div>))}
+        </div>
+      </div>
+      <GenButtons label="Step 3 본문 생성하기" disabled={outline.sections.length < 3} busy={busy === 'body'} apiReady={apiReady} onSim={() => onGen('body', 'sim')} onPaste={() => onGen('body', 'paste')} onApi={() => onGen('body', 'api')} />
+    </div>
+  </div>);
+}
+
+/* ===================== Step 3 ===================== */
+function Counter({ text }) {
+  const all = text.length; const noSp = text.replace(/\s/g, '').length; const b = byteLen(text);
+  return (<div className="text-xs sm:text-sm font-bold text-gray-600 bg-[#F7F8FA] rounded-lg px-3 py-2">공백 포함 <span className="text-[#5B4BDB]">{all.toLocaleString()}</span>자 | <span className="text-[#5B4BDB]">{b.toLocaleString()}</span> byte <span className="font-normal text-gray-400">(한글 2byte, 영문 1byte)</span> / 공백 제외 <span className="text-[#5B4BDB]">{noSp.toLocaleString()}</span>자</div>);
+}
+function Step3({ form, outline, body, setBody, images, setImages, cardMade, setCardMade, onGen, busy, apiReady, notify, openModal, saveArchive, ev, apiKey, model, runImprove }) {
+  const [tab, setTab] = useState('edit');
+  const taRef = useRef(null);
+  const headings = useMemo(() => (body || '').split('\n').filter(l => l.trim().startsWith('■')).map(l => l.trim().replace(/^■\s*/, '')), [body]);
+  const plain = useMemo(() => fullPlain(body, form), [body, form]);
+  const title = outline ? outline.titles[outline.sel] : (form.title || form.topic);
+  const meta = outline ? outline.meta : '';
+  const tags = hashtags(form);
+  const phCount = ev.expPh + ev.chkPh;
+  const jumpNext = () => {
+    const ta = taRef.current; if (!ta) return; const from = ta.selectionEnd || 0; const re = /\[(작성자 경험 입력|확인 필요)[^\]]*\]/g;
+    let m, first = null, hit = null; while ((m = re.exec(body))) { if (!first) first = m; if (m.index >= from) { hit = m; break; } }
+    hit = hit || first; if (!hit) return; ta.focus(); ta.setSelectionRange(hit.index, hit.index + hit[0].length);
+    const lineNo = body.slice(0, hit.index).split('\n').length; ta.scrollTop = Math.max(0, (lineNo - 3) * 28);
+  };
+  const doNaverCopy = async () => { const ok = await copyHtml(fullHtml(body, form, images, true), plain); notify(ok ? '네이버 블로그용 서식이 복사되었어요. 스마트에디터에 붙여넣으세요.' : '복사에 실패했어요. [텍스트만 복사]를 이용해 주세요.', ok ? 'ok' : 'err'); };
+  const naverCopy = () => {
+    if (phCount > 0) openModal({ type: 'confirm', title: '미완성 항목이 남아 있어요', msg: `미완성 항목 ${phCount}건 존재 (확인 필요 ${ev.chkPh}건 · 작성자 경험 입력 ${ev.expPh}건). 그대로 복사하면 노란/주황색 표시까지 함께 붙여넣어집니다.`, okText: '그대로 복사', onOk: doNaverCopy, cancelText: '돌아가서 수정', onCancel: () => { setTab('edit'); setTimeout(jumpNext, 50); } });
+    else doNaverCopy();
+  };
+  const cp = async (t, msg) => { const ok = await copyText(t); notify(ok ? msg : '복사에 실패했어요', ok ? 'ok' : 'err'); };
+  const fname = (title || 'blog').replace(/[\\/:*?"<>|]/g, '').slice(0, 40);
+  const dlHtml = () => { download(fname + '.html', `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${esc(title)}</title></head><body style="max-width:760px;margin:40px auto;padding:0 16px;"><h1 style="font-size:26px;">${esc(title)}</h1>${fullHtml(body, form, images, false)}<p style="color:#888;font-size:14px;margin-top:30px;">${tags.join(' ')}</p></body></html>`, 'text/html'); notify('HTML 다운로드를 시작했어요 (Claude 화면 안에서는 막힐 수 있어요)'); };
+  const dlTxt = () => { download(fname + '.txt', `${title}\n\n${plain}\n\n${tags.join(' ')}\n\n[메타 설명]\n${meta}`, 'text/plain'); notify('TXT 다운로드를 시작했어요 (Claude 화면 안에서는 막힐 수 있어요)'); };
+
+  return (<div className="space-y-5">
+    <div className="grid lg:grid-cols-5 gap-5">
+      <div className="lg:col-span-2 space-y-4">
+        <div className="flex gap-1 bg-white border border-[#ECEEF3] rounded-xl p-1">
+          <button onClick={() => setTab('edit')} className={`flex-1 py-2 rounded-lg text-sm font-bold ${tab === 'edit' ? 'bg-[#5B4BDB] text-white' : 'text-gray-500'}`}>본문 편집</button>
+          <button onClick={() => setTab('img')} className={`flex-1 py-2 rounded-lg text-sm font-bold ${tab === 'img' ? 'bg-[#5B4BDB] text-white' : 'text-gray-500'}`}>이미지·카드뉴스</button>
+        </div>
+        {tab === 'edit' ? (<div className="card p-4 space-y-3">
+          <Counter text={plain} />
+          {phCount > 0 && <div className="flex items-center justify-between gap-2 bg-[#FFF8D6] rounded-lg px-3 py-2 text-sm"><span className="text-[#7a6200] font-bold flex items-center gap-1.5"><Icon n="alert" s={15} />미완성 {phCount}건 (경험 {ev.expPh} · 확인 {ev.chkPh})</span><button className="btn btn-o btn-s" onClick={jumpNext}>다음 항목 찾기</button></div>}
+          <textarea ref={taRef} className="inp font-mono !text-[14px] scroll-thin" style={{ minHeight: 520 }} value={body} onChange={e => setBody(e.target.value)} />
+          <details className="text-xs text-gray-500"><summary className="cursor-pointer font-bold">편집 서식 안내</summary>
+            <div className="mt-2 leading-relaxed bg-[#F7F8FA] rounded-lg p-3">■ 소제목 · **굵게** · - 목록 · | 표 | 형식 · Q. 질문 / A. 답변 · [목차] 다음 줄부터 1. 2. 3. · (출처: 기관, 날짜) · [확인 필요: …] · [작성자 경험 입력: …]</div></details>
+          <GenButtons label="본문 다시 생성" busy={busy === 'body'} apiReady={apiReady} onSim={() => onGen('body', 'sim')} onPaste={() => onGen('body', 'paste')} onApi={() => onGen('body', 'api')} />
+        </div>) : (<ImageTools form={form} outline={outline} body={body} headings={headings} images={images} setImages={setImages} setCardMade={setCardMade} notify={notify} />)}
+      </div>
+      <div className="lg:col-span-3 space-y-3">
+        <div className="card p-3 flex flex-wrap gap-2 lg:sticky lg:top-2 z-10">
+          <button className="btn btn-g" onClick={naverCopy}><Icon n="copy" />네이버 블로그 복사</button>
+          <button className="btn btn-o" onClick={() => cp(plain, '본문 텍스트가 복사되었어요')}><Icon n="file" />텍스트만 복사</button>
+          <button className="btn btn-o" onClick={() => cp(title, '제목이 복사되었어요')}>제목 복사</button>
+          <button className="btn btn-o" onClick={() => cp(meta, '메타 설명이 복사되었어요')} disabled={!meta}>메타 설명 복사</button>
+          <button className="btn btn-o" onClick={() => cp(tags.join(' '), '해시태그 10개가 복사되었어요')}><Icon n="hash" />해시태그 10개</button>
+          <button className="btn btn-o" onClick={dlHtml}><Icon n="dl" />HTML</button>
+          <button className="btn btn-o" onClick={dlTxt}><Icon n="dl" />TXT</button>
+          <button className="btn btn-p ml-auto" onClick={saveArchive}><Icon n="save" />보관함에 저장</button>
+        </div>
+        <div className="card p-6 sm:p-8">
+          <p className="text-xs text-gray-400 mb-1">네이버 블로그 미리보기</p>
+          <h1 className="text-2xl font-extrabold leading-snug mb-5 pb-4 border-b border-[#ECEEF3]">{title}</h1>
+          <div className="preview-body" dangerouslySetInnerHTML={{ __html: fullHtml(body, form, images, false) }} />
+          <p className="text-sm text-[#5B4BDB] mt-6">{tags.join(' ')}</p>
+        </div>
+      </div>
+    </div>
+    <EvalPanel ev={ev} form={form} body={body} openModal={openModal} notify={notify} apiReady={apiReady} runImprove={runImprove} busy={busy} />
+  </div>);
+}
+
+function ImageTools({ form, outline, body, headings, images, setImages, setCardMade, notify }) {
+  const [pos, setPos] = useState(0); const [cap, setCap] = useState('');
+  const tables = parseTables(body);
+  const [kind, setKind] = useState(tables.length ? 'table' : 'check');
+  const [ctitle, setCtitle] = useState(form.topic || '핵심 체크리스트');
+  const [color, setColor] = useState('#5B4BDB');
+  const [png, setPng] = useState(null);
+  const items = outline && outline.tips.length ? outline.tips : (body.match(/^- .+$/gm) || []).map(x => x.slice(2).replace(/\*\*/g, '')).slice(0, 6);
+  const svg = useMemo(() => cardSvg({ kind, title: ctitle, items, table: tables[0], footer: `정보 기준일 ${dot(form.baseDate)} · ${form.author}`, color }), [kind, ctitle, items.join('|'), JSON.stringify(tables[0] || []), color, form.baseDate, form.author]);
+  const onFiles = e => {
+    Array.from(e.target.files || []).forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const r = new FileReader(); r.onload = () => setImages(im => [...im, { id: uid(), name: file.name, url: r.result, pos: Number(pos), caption: cap || file.name.replace(/\.[^.]+$/, '') }]); r.readAsDataURL(file);
+    });
+    e.target.value = ''; setCap('');
+  };
+  const makePng = async () => { try { const p = await svgToPng(svg); setPng(p); setCardMade(true); download(`카드뉴스_${ctitle.slice(0, 20)}.png`, p.blob); notify('PNG를 만들었어요. 다운로드가 막히면 아래 이미지를 우클릭해 저장하세요.'); } catch (e) { notify('PNG 변환에 실패했어요', 'err'); } };
+  const copyPng = async () => { try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': png.blob })]); notify('이미지가 복사되었어요. 블로그 에디터에 붙여넣으세요.'); } catch (e) { notify('이미지 복사가 막혀 있어요. 우클릭 → 이미지 복사를 이용하세요.', 'err'); } };
+  return (<div className="space-y-4">
+    <div className="card p-4">
+      <p className="font-extrabold mb-3 flex items-center gap-1.5"><Icon n="image" />소제목별 추천 이미지</p>
+      {headings.length ? <div className="space-y-2.5">{headings.map((h, i) => { const k = imgKeywords(h, form.topic); return (<div key={i} className="text-sm border-b border-dashed border-[#ECEEF3] pb-2">
+        <p className="font-bold text-gray-700">■ {h}</p>
+        <p className="text-gray-500">캡션 예시: {h.replace(/[:?]/g, '')} 핵심 정리 이미지</p>
+        <p className="text-gray-500">검색어: {k.kr} / <span className="text-gray-700">{k.en}</span></p>
+        <div className="flex gap-2 mt-1"><a className="text-xs font-bold text-[#5B4BDB] underline" href={`https://unsplash.com/s/photos/${encodeURIComponent(k.q)}`} target="_blank" rel="noopener">Unsplash</a><a className="text-xs font-bold text-[#5B4BDB] underline" href={`https://www.pexels.com/search/${encodeURIComponent(k.q)}/`} target="_blank" rel="noopener">Pexels</a></div>
+      </div>); })}</div> : <p className="text-sm text-gray-400">본문에 ■ 소제목이 생기면 추천이 표시됩니다.</p>}
+    </div>
+    <div className="card p-4">
+      <p className="font-extrabold mb-3 flex items-center gap-1.5"><Icon n="upload" />내 사진 넣기</p>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <select className="inp !py-2 text-sm" value={pos} onChange={e => setPos(e.target.value)}><option value={-1}>본문 맨 위</option>{headings.map((h, i) => <option key={i} value={i}>■ {h.slice(0, 18)} 아래</option>)}</select>
+        <input className="inp !py-2 text-sm" placeholder="사진 캡션 (선택)" value={cap} onChange={e => setCap(e.target.value)} />
+      </div>
+      <label className="btn btn-o w-full justify-center cursor-pointer"><Icon n="upload" />사진 선택 (여러 장 가능)<input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} /></label>
+      <p className="text-xs text-gray-400 mt-2">미리보기에는 사진이 보이고, 네이버 복사 시에는 [사진 삽입 위치] 표시로 들어갑니다. 사진은 스마트에디터에서 직접 올려 주세요. (사진은 새로고침 시 저장되지 않아요)</p>
+      {images.length > 0 && <div className="grid grid-cols-3 gap-2 mt-3">{images.map(im => (<div key={im.id} className="relative group">
+        <img src={im.url} className="w-full h-20 object-cover rounded-lg" />
+        <p className="text-[11px] text-gray-500 truncate mt-0.5">{Number(im.pos) < 0 ? '맨 위' : `${Number(im.pos) + 1}번 소제목`} · {im.caption}</p>
+        <button onClick={() => setImages(x => x.filter(y => y.id !== im.id))} className="absolute top-1 right-1 bg-white/90 rounded-full p-1 text-red-500"><Icon n="x" s={12} /></button>
+      </div>))}</div>}
+    </div>
+    <div className="card p-4">
+      <p className="font-extrabold mb-3 flex items-center gap-1.5"><Icon n="spark" />SVG 카드뉴스 생성기</p>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <select className="inp !py-2 text-sm" value={kind} onChange={e => setKind(e.target.value)}><option value="check">체크리스트형</option><option value="table" disabled={!tables.length}>비교표형{tables.length ? '' : ' (표 없음)'}</option></select>
+        <div className="flex gap-1.5 items-center">{['#5B4BDB', '#22B573', '#1F2937', '#E8890C'].map(c => <button key={c} onClick={() => setColor(c)} className={`w-8 h-8 rounded-full border-2 ${color === c ? 'border-gray-800' : 'border-white'}`} style={{ background: c }} />)}</div>
+      </div>
+      <input className="inp !py-2 text-sm mb-3" value={ctitle} onChange={e => setCtitle(e.target.value)} placeholder="카드 제목" />
+      <div className="rounded-lg overflow-hidden border border-[#ECEEF3] [&>svg]:w-full [&>svg]:h-auto" dangerouslySetInnerHTML={{ __html: svg }} />
+      <div className="flex gap-2 mt-3"><button className="btn btn-p flex-1 justify-center" onClick={makePng}><Icon n="dl" />PNG 다운로드</button>{png && <button className="btn btn-o" onClick={copyPng}><Icon n="copy" />이미지 복사</button>}</div>
+      {png && <div className="mt-3"><p className="text-xs text-gray-400 mb-1">생성된 PNG (우클릭 → 다른 이름으로 저장 가능)</p><img src={png.url} className="w-full rounded-lg border border-[#ECEEF3]" /></div>}
+    </div>
+  </div>);
+}
+
+function EvalPanel({ ev, form, body, openModal, notify, apiReady, runImprove, busy }) {
+  return (<div className="card p-5 sm:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+      <div><p className="text-xs font-extrabold text-[#5B4BDB] flex items-center gap-1"><Icon n="award" s={14} />상위노출 품질 평가 엔진</p>
+        <p className="text-sm text-gray-500 mt-1">본문 구성 요소를 자동 점검한 참고 점수입니다. 검색 순위를 보장하지는 않아요.</p></div>
+      <div className="flex items-center gap-4">
+        <div className="text-right"><p className="text-4xl font-extrabold" style={{ color: ev.grade.c }}>{ev.total}<span className="text-lg text-gray-400">/100</span></p>
+          {ev.ded > 0 && <p className="text-xs text-gray-400">항목 합계 {ev.raw}점 − 미완성 감점 {ev.ded}점</p>}</div>
+        <span className="px-3 py-1.5 rounded-full text-sm font-extrabold" style={{ color: ev.grade.c, background: ev.grade.bg }}>{ev.grade.t}</span>
+      </div>
+    </div>
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {CATS.map(([k, name, max], i) => { const v = ev.sc[k]; const r = v / max; const col = r >= 0.85 ? '#22B573' : r >= 0.6 ? '#E8890C' : '#E5484D'; return (<div key={k} className="border border-[#ECEEF3] rounded-xl p-3.5">
+        <div className="flex justify-between items-start gap-2"><p className="text-sm font-bold text-gray-700">{i + 1}. {name}</p><p className="text-sm font-extrabold whitespace-nowrap" style={{ color: col }}>{v}<span className="text-gray-400 font-bold">/{max}</span></p></div>
+        <div className="h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${r * 100}%`, background: col }} /></div>
+        <p className="text-xs text-gray-400 mt-2">{ev.note[k]}</p></div>); })}
+    </div>
+    {(ev.expPh > 0 || ev.chkPh > 0) && <p className="text-sm mt-4 bg-[#FFF8D6] text-[#7a6200] rounded-lg p-3">감점: [작성자 경험 입력] {ev.expPh}건 × 2점, [확인 필요] {ev.chkPh}건 × 1점 = −{ev.ded}점</p>}
+    {ev.sug.length > 0 && <div className="mt-5"><p className="font-extrabold mb-3">우선 개선 제안 3가지</p>
+      <div className="grid md:grid-cols-3 gap-3">{ev.sug.map((s, i) => (<div key={i} className="rounded-xl p-4 bg-[#FAF9FF] border border-[#E3E0FA] flex flex-col">
+        <p className="text-sm font-extrabold text-[#5B4BDB] mb-1">{i + 1}. {s.t}</p><p className="text-sm text-gray-600 flex-1 leading-relaxed">{s.d}</p>
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          <button className="btn btn-o btn-s" onClick={async () => { const p = improvePrompt(s.fb, form, body); const ok = await copyText(p); notify(ok ? '개선 프롬프트가 복사되었어요' : '복사 실패', ok ? 'ok' : 'err'); openModal({ type: 'paste', kind: 'body', prompt: p, title: '개선 결과 붙여넣기' }); }}><Icon n="copy" s={13} />개선 프롬프트 복사</button>
+          {apiReady && <button className="btn btn-p btn-s" disabled={!!busy} onClick={() => runImprove(s.fb)}><Icon n="bot" s={13} />API로 다듬기</button>}
+        </div></div>))}</div></div>}
+  </div>);
+}
+
+/* ===================== 보관함 ===================== */
+function Archive({ archive, setArchive, onLoad, notify }) {
+  const [q, setQ] = useState('');
+  const list = archive.filter(a => !q || (a.title + a.keywords.join(' ')).includes(q));
+  const json = () => JSON.stringify(archive, null, 2);
+  const importJson = e => { const file = e.target.files[0]; if (!file) return; const r = new FileReader(); r.onload = () => { try { const arr = JSON.parse(r.result); if (!Array.isArray(arr)) throw 0; setArchive(a => { const ids = new Set(a.map(x => x.id)); return [...arr.filter(x => x && x.id && !ids.has(x.id)), ...a]; }); notify(`${arr.length}건을 가져왔어요`); } catch (er) { notify('JSON 형식이 올바르지 않아요', 'err'); } }; r.readAsText(file); e.target.value = ''; };
+  return (<div className="space-y-4">
+    <div className="card p-4 flex flex-wrap gap-2 items-center">
+      <div className="relative flex-1 min-w-[200px]"><Icon n="search" s={16} c="absolute left-3 top-3 text-gray-400" /><input className="inp !pl-9" placeholder="제목·키워드 검색" value={q} onChange={e => setQ(e.target.value)} /></div>
+      <button className="btn btn-o" onClick={async () => { const ok = await copyText(json()); notify(ok ? '보관함 JSON이 복사되었어요' : '복사 실패', ok ? 'ok' : 'err'); }}><Icon n="copy" />JSON 복사</button>
+      <button className="btn btn-o" onClick={() => { download(`블로그보관함_${today()}.json`, json(), 'application/json'); notify('JSON 다운로드를 시작했어요'); }}><Icon n="dl" />JSON 내보내기</button>
+      <label className="btn btn-o cursor-pointer"><Icon n="upload" />JSON 가져오기<input type="file" accept=".json,application/json" className="hidden" onChange={importJson} /></label>
+    </div>
+    {list.length === 0 ? <div className="card p-12 text-center text-gray-400"><Icon n="archive" s={36} c="mx-auto mb-3" />보관된 글이 없어요. Step 3에서 [보관함에 저장]을 눌러 보세요.</div> :
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">{list.map(a => { const g = a.score >= 90 ? '#22B573' : a.score >= 80 ? '#E8890C' : '#E5484D'; return (<div key={a.id} className="card p-4 flex flex-col">
+        <div className="flex justify-between gap-2"><p className="font-extrabold leading-snug">{a.title}</p><span className="text-lg font-extrabold" style={{ color: g }}>{a.score}</span></div>
+        <p className="text-xs text-gray-400 mt-1">{new Date(a.date).toLocaleString('ko-KR')} · {toPlain(a.body).length.toLocaleString()}자</p>
+        <div className="flex flex-wrap gap-1 mt-2 flex-1">{a.keywords.map(k => <span key={k} className="text-[11px] font-bold bg-[#F1EFFF] text-[#5B4BDB] px-1.5 py-0.5 rounded-full h-fit">#{k}</span>)}</div>
+        <div className="flex gap-2 mt-3"><button className="btn btn-p btn-s flex-1 justify-center" onClick={() => onLoad(a)}>불러오기</button>
+          <button className="btn btn-o btn-s" onClick={async () => { const ok = await copyText(toPlain(a.body)); notify(ok ? '본문이 복사되었어요' : '복사 실패'); }}><Icon n="copy" s={13} /></button>
+          <button className="btn btn-o btn-s text-red-500" onClick={() => setArchive(x => x.filter(y => y.id !== a.id))}><Icon n="trash" s={13} /></button></div>
+      </div>); })}</div>}
+  </div>);
+}
+
+/* ===================== App ===================== */
+const NAV = [
+  { id: 'write', label: '정보성(부동산)', group: 'AI 글쓰기', icon: 'pen' },
+  { id: 'visit', label: '방문후기', group: 'AI 글쓰기', icon: 'map', soon: true },
+  { id: 'news', label: '뉴스로 블로그 쓰기', group: 'AI 글쓰기', icon: 'news', soon: true },
+  { id: 'yt', label: '유튜브로 쓰기', group: 'AI 글쓰기', icon: 'youtube', soon: true },
+  { id: 'kw', label: '키워드 분석', group: '도구', icon: 'search', soon: true },
+  { id: 'archive', label: '보관함', group: '도구', icon: 'archive' },
+];
+const STEPS = ['주제 설정', '아웃라인 구성', '글쓰기 및 평가 완료'];
+
+function App() {
+  const saved = useMemo(() => lsGet(LS_KEY, null), []);
+  const [step, setStep] = useState(saved && saved.step || 1);
+  const [view, setView] = useState('write');
+  const [form, setForm] = useState(() => saved && saved.form ? { ...defaultForm(), ...saved.form, author: fixAuthor(saved.form.author), profile: migrateProfile(saved.form.profile) } : defaultForm());
+  const [outline, setOutline] = useState(saved && saved.outline || null);
+  const [body, setBody] = useState(saved && saved.body || '');
+  const [images, setImages] = useState([]);
+  const [cardMade, setCardMade] = useState(false);
+  const [apiKey, setApiKey] = useState(() => { try { return sessionStorage.getItem('llbs-key') || ''; } catch (e) { return ''; } });
+  const [model, setModel] = useState(() => { try { return sessionStorage.getItem('llbs-model') || 'claude-sonnet-5-5'; } catch (e) { return 'claude-sonnet-5-5'; } });
+  const [archive, setArchive] = useState(() => lsGet(ARCH_KEY, []));
+  const [toast, setToast] = useState(null);
+  const [modal, setModal] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [navOpen, setNavOpen] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+  const [pasteVal, setPasteVal] = useState('');
+  const [keyDraft, setKeyDraft] = useState('');
+
+  useEffect(() => { const t = setTimeout(() => { if (lsSet(LS_KEY, { step, form, outline, body })) setSavedAt(new Date()); }, 500); return () => clearTimeout(t); }, [step, form, outline, body]);
+  useEffect(() => { if (!lsSet(ARCH_KEY, archive)) notifyFn('브라우저 저장 공간이 부족해요. 오래된 글을 정리하거나 JSON으로 내보내세요.', 'err'); }, [archive]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3400); return () => clearTimeout(t); }, [toast]);
+  function notifyFn(msg, kind = 'ok') { setToast({ msg, kind, id: Date.now() }); }
+  const notify = notifyFn;
+
+  const ev = useMemo(() => evaluate({ body, f: form, o: outline, imgCount: images.length, cardMade }), [body, form, outline, images.length, cardMade]);
+
+  const applyResult = (kind, txt) => {
+    if (kind === 'outline') { const o = parseOutline(txt, form); if (!o) { notify('JSON을 읽지 못했어요. AI 답변의 { } 부분이 모두 들어갔는지 확인하세요.', 'err'); return false; } setOutline(o); setStep(2); notify('아웃라인이 적용되었어요'); return true; }
+    const b = normalizeBody(txt, form); if (b.replace(/정보 기준일.*$/m, '').trim().length < 50) { notify('본문이 너무 짧아요. 결과 전체를 붙여넣어 주세요.', 'err'); return false; }
+    setBody(b); setStep(3); notify('본문이 적용되었어요'); return true;
+  };
+  const onGen = async (kind, method) => {
+    if (kind === 'outline' && !form.topic.trim()) { notify('주제를 먼저 입력하세요', 'err'); return; }
+    const prompt = kind === 'outline' ? outlinePrompt(form) : bodyPrompt(form, outline);
+    if (method === 'sim') {
+      if (kind === 'outline') { setOutline(simOutline(form)); setStep(2); notify('샘플 아웃라인을 만들었어요'); }
+      else { setBody(simBody(form, outline || simOutline(form))); setStep(3); notify('샘플 본문을 만들었어요. 노란색·주황색 표시를 채워 주세요.'); }
+      return;
+    }
+    if (method === 'paste') { setPasteVal(''); setModal({ type: 'paste', kind, prompt }); return; }
+    if (!apiKey) { setKeyDraft(''); setModal({ type: 'settings' }); return; }
+    setBusy(kind);
+    try { const txt = await callClaude(apiKey, model, prompt); applyResult(kind, txt); } catch (e) { notify('API 호출 실패: ' + e.message, 'err'); } finally { setBusy(''); }
+  };
+  const runImprove = async fb => {
+    setBusy('body');
+    try { const txt = await callClaude(apiKey, model, improvePrompt(fb, form, body)); applyResult('body', txt); } catch (e) { notify('API 호출 실패: ' + e.message, 'err'); } finally { setBusy(''); }
+  };
+  const openModal = m => { if (m.type === 'paste') setPasteVal(''); setModal(m); };
+  const saveArchive = () => {
+    if (!body.trim()) { notify('저장할 본문이 없어요', 'err'); return; }
+    const title = outline ? outline.titles[outline.sel] : (form.title || form.topic);
+    setArchive(a => [{ id: uid(), title, date: new Date().toISOString(), body, score: ev.total, keywords: form.keywords, form, outline }, ...a]);
+    notify('보관함에 저장했어요');
+  };
+  const loadArchive = a => { setForm({ ...defaultForm(), ...a.form, author: fixAuthor(a.form && a.form.author), profile: migrateProfile(a.form && a.form.profile) }); setOutline(a.outline); setBody(a.body); setImages([]); setStep(3); setView('write'); notify('보관함 글을 불러왔어요'); };
+  const resetAll = () => setModal({ type: 'confirm', title: '새 글 시작', msg: '현재 작성 중인 주제·아웃라인·본문을 지우고 새로 시작할까요? (명함 정보는 유지됩니다)', okText: '새로 시작', onOk: () => { setForm(f => ({ ...defaultForm(), author: f.author, profile: f.profile, profilePos: f.profilePos })); setOutline(null); setBody(''); setImages([]); setCardMade(false); setStep(1); } });
+
+  const canGo = s => s === 1 || (s === 2 && outline) || (s === 3 && body);
+  const groups = ['AI 글쓰기', '도구'];
+
+  return (<div className="min-h-screen flex">
+    {/* 사이드바 */}
+    {navOpen && <div className="fixed inset-0 bg-black/30 z-30 lg:hidden" onClick={() => setNavOpen(false)} />}
+    <aside className={`fixed lg:sticky top-0 left-0 z-40 h-screen w-64 bg-white border-r border-[#ECEEF3] flex flex-col transition-transform ${navOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <div className="px-5 py-5 border-b border-[#ECEEF3]">
+        <div className="flex items-center gap-2.5"><div className="w-9 h-9 shrink-0 rounded-xl bg-[#5B4BDB] text-white flex items-center justify-center font-extrabold text-[15px]">is</div>
+          <div className="min-w-0"><p className="font-extrabold leading-tight text-[13px] break-all">부동산이즈경주역신도시부동산공인중개사사무소</p><p className="text-xs text-gray-400 font-bold mt-0.5">블로그 스튜디오</p></div></div>
+      </div>
+      <nav className="flex-1 p-3 overflow-y-auto">
+        {groups.map(g => (<div key={g} className="mb-4"><p className="px-3 text-[11px] font-extrabold text-gray-400 mb-1.5">{g}</p>
+          {NAV.filter(n => n.group === g).map(n => (<button key={n.id} disabled={n.soon} onClick={() => { setView(n.id); setNavOpen(false); }}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[15px] font-bold mb-0.5 ${view === n.id ? 'bg-[#F1EFFF] text-[#5B4BDB]' : n.soon ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-50'}`}>
+            <Icon n={n.icon} s={17} /><span className="flex-1 text-left">{n.label}</span>
+            {n.soon && <span className="text-[10px] font-extrabold bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded">준비 중</span>}
+            {n.id === 'archive' && archive.length > 0 && <span className="text-[11px] font-extrabold bg-[#5B4BDB] text-white px-1.5 rounded-full">{archive.length}</span>}
+          </button>))}</div>))}
+      </nav>
+      <div className="p-4 border-t border-[#ECEEF3] space-y-2">
+        <button className="btn btn-o w-full justify-center" onClick={() => { setKeyDraft(''); setModal({ type: 'settings' }); }}><Icon n="key" />{apiKey ? 'API 연결됨' : 'Claude API 설정'}{apiKey && <span className="w-2 h-2 rounded-full bg-[#22B573]" />}</button>
+        <p className="text-[11px] text-gray-400 text-center">{savedAt ? `자동 임시저장 ${savedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '입력 내용은 이 브라우저에 자동 저장됩니다'}</p>
+      </div>
+    </aside>
+
+    {/* 본문 */}
+    <main className="flex-1 min-w-0">
+      <header className="bg-white/90 backdrop-blur border-b border-[#ECEEF3] sticky top-0 z-20">
+        <div className="px-4 sm:px-6 py-3 flex items-center gap-3">
+          <button className="lg:hidden p-2 -ml-2" onClick={() => setNavOpen(true)}><Icon n="menu" s={20} /></button>
+          <div className="flex-1 min-w-0"><p className="text-xs text-gray-400 font-bold">{view === 'archive' ? '도구' : 'AI 글쓰기'}</p><h1 className="font-extrabold text-lg truncate">{view === 'archive' ? '보관함' : '정보성 블로그 (부동산)'}</h1></div>
+          {view === 'write' && <button className="btn btn-o btn-s" onClick={resetAll}><Icon n="refresh" s={14} />새 글</button>}
+        </div>
+        {view === 'write' && <div className="px-4 sm:px-6 pb-3 flex items-center gap-1 sm:gap-2 overflow-x-auto">
+          {STEPS.map((s, i) => { const n = i + 1; const on = step === n; const done = step > n; return (<React.Fragment key={s}>
+            <button disabled={!canGo(n)} onClick={() => setStep(n)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold whitespace-nowrap ${on ? 'bg-[#5B4BDB] text-white' : done ? 'bg-[#E8F8F0] text-[#16774b]' : 'bg-gray-100 text-gray-400'} disabled:cursor-not-allowed`}>
+              <span className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center ${on ? 'bg-white text-[#5B4BDB]' : done ? 'bg-[#22B573] text-white' : 'bg-white'}`}>{done ? <Icon n="check" s={12} /> : n}</span>Step {n} {s}</button>
+            {i < 2 && <Icon n="right" s={16} c="text-gray-300 shrink-0" />}</React.Fragment>); })}
+        </div>}
+      </header>
+      <div className="p-4 sm:p-6 max-w-[1500px] mx-auto">
+        {view === 'archive' ? <Archive archive={archive} setArchive={setArchive} onLoad={loadArchive} notify={notify} /> :
+          step === 1 ? <Step1 form={form} setForm={setForm} onGen={onGen} busy={busy} apiReady={!!apiKey} notify={notify} /> :
+            step === 2 ? <Step2 form={form} outline={outline} setOutline={setOutline} onGen={onGen} busy={busy} apiReady={!!apiKey} back={() => setStep(1)} /> :
+              <Step3 form={form} outline={outline} body={body} setBody={setBody} images={images} setImages={setImages} cardMade={cardMade} setCardMade={setCardMade} onGen={onGen} busy={busy} apiReady={!!apiKey} notify={notify} openModal={openModal} saveArchive={saveArchive} ev={ev} apiKey={apiKey} model={model} runImprove={runImprove} />}
+        <p className="text-center text-xs text-gray-400 mt-10 mb-4">세금·정책·시세 수치는 반드시 공식 자료로 확인 후 발행하세요. 이 도구는 검색 순위를 보장하지 않습니다.</p>
+      </div>
+      <footer className="bg-white border-t border-[#ECEEF3] mt-2">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-7 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-11 h-11 shrink-0 rounded-xl bg-[#5B4BDB] text-white flex items-center justify-center font-extrabold text-[17px] tracking-tight">is</div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-extrabold text-[#5B4BDB] tracking-wide">부동산is</p>
+              <p className="font-extrabold text-[15px] sm:text-base text-gray-800 break-all leading-snug">부동산이즈경주역신도시부동산공인중개사사무소</p>
+            </div>
+          </div>
+          <dl className="flex flex-wrap md:justify-end gap-2 text-sm md:max-w-[60%]">
+            <div className="flex items-center gap-2 bg-[#F7F8FA] rounded-lg px-3.5 py-2"><dt className="text-xs font-bold text-gray-400">대표</dt><dd className="font-extrabold text-gray-700">이선예</dd></div>
+            <div className="flex items-center gap-2 bg-[#F7F8FA] rounded-lg px-3.5 py-2"><dt className="text-xs font-bold text-gray-400">중개사무소 등록번호</dt><dd className="font-extrabold text-gray-700 tabular-nums">47130-2017-00023</dd></div>
+            <div className="flex items-center gap-2 bg-[#F7F8FA] rounded-lg px-3.5 py-2"><dt className="text-xs font-bold text-gray-400 shrink-0">소재지</dt><dd className="font-extrabold text-gray-700 break-keep">경주시 건천읍 경주역세권1로90, 상가132동 201호 (신경주유보라104동앞)</dd></div>
+          </dl>
+        </div>
+        <div className="border-t border-[#F1F2F5]">
+          <p className="max-w-[1500px] mx-auto px-4 sm:px-6 py-3 text-[11px] text-gray-400">© {new Date().getFullYear()} 부동산이즈경주역신도시부동산공인중개사사무소. All rights reserved.</p>
+        </div>
+      </footer>
+    </main>
+
+    {/* 모달 */}
+    {modal && modal.type === 'paste' && <Modal wide title={modal.title || (modal.kind === 'outline' ? '아웃라인: 프롬프트 복사 & 결과 붙여넣기' : '본문: 프롬프트 복사 & 결과 붙여넣기')} onClose={() => setModal(null)}
+      footer={<><button className="btn btn-o" onClick={() => setModal(null)}>닫기</button><button className="btn btn-g" disabled={!pasteVal.trim()} onClick={() => { if (applyResult(modal.kind, pasteVal)) setModal(null); }}><Icon n="check" />붙여넣은 결과 적용</button></>}>
+      <ol className="flex flex-wrap gap-2 text-xs font-bold mb-4">{['① 프롬프트 복사', '② Claude·ChatGPT에 붙여넣고 실행', '③ 답변 전체를 아래에 붙여넣기'].map(s => <li key={s} className="bg-[#F1EFFF] text-[#5B4BDB] px-2.5 py-1 rounded-full">{s}</li>)}</ol>
+      <div className="flex items-center justify-between mb-1.5"><label className="lbl !mb-0">생성 프롬프트</label>
+        <div className="flex gap-2"><a className="btn btn-o btn-s" href="https://claude.ai/new" target="_blank" rel="noopener"><Icon n="ext" s={13} />Claude 열기</a><a className="btn btn-o btn-s" href="https://chatgpt.com" target="_blank" rel="noopener"><Icon n="ext" s={13} />ChatGPT 열기</a>
+          <button className="btn btn-p btn-s" onClick={async () => { const ok = await copyText(modal.prompt); notify(ok ? '프롬프트가 복사되었어요' : '복사 실패 — 직접 선택해 복사하세요', ok ? 'ok' : 'err'); }}><Icon n="copy" s={13} />복사</button></div></div>
+      <textarea readOnly className="inp !text-[13px] font-mono bg-[#F7F8FA] scroll-thin" rows={8} value={modal.prompt} onFocus={e => e.target.select()} />
+      <label className="lbl mt-4">AI 결과 붙여넣기 {modal.kind === 'outline' ? '(JSON)' : '(본문 텍스트)'}</label>
+      <textarea className="inp !text-[14px] scroll-thin" rows={9} value={pasteVal} onChange={e => setPasteVal(e.target.value)} placeholder={modal.kind === 'outline' ? '{"titles": [...], "sections": [...] ...} 형태의 답변을 그대로 붙여넣으세요' : '정보 기준일: ... 로 시작하는 본문을 붙여넣으세요 (## 제목은 ■ 소제목으로 자동 변환)'} />
+    </Modal>}
+    {modal && modal.type === 'settings' && <Modal title="Claude API 연결 (선택)" onClose={() => setModal(null)}
+      footer={<>{apiKey && <button className="btn btn-o text-red-500" onClick={() => { setApiKey(''); try { sessionStorage.removeItem('llbs-key'); } catch (e) {} notify('API 키를 지웠어요'); setModal(null); }}>키 삭제</button>}
+        <button className="btn btn-p" disabled={!keyDraft.trim() && !apiKey} onClick={() => { const k = keyDraft.trim() || apiKey; setApiKey(k); try { sessionStorage.setItem('llbs-key', k); sessionStorage.setItem('llbs-model', model); } catch (e) {} notify('API 설정을 저장했어요 (이 탭을 닫으면 사라집니다)'); setModal(null); }}>저장</button></>}>
+      <div className="space-y-4 text-[15px]">
+        <Field label="Anthropic API Key" hint={apiKey ? `현재 연결됨: ${apiKey.slice(0, 10)}…` : 'sk-ant-로 시작하는 키'}><input type="password" className="inp" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="sk-ant-..." autoComplete="off" /></Field>
+        <Field label="모델" hint="예: claude-sonnet-5-5, claude-haiku-5-5"><input className="inp" value={model} onChange={e => setModel(e.target.value)} /></Field>
+        <div className="text-sm bg-[#F7F8FA] rounded-lg p-3 leading-relaxed text-gray-600">
+          <p>• 키는 이 브라우저 탭의 세션에만 보관되고, Anthropic API 외 다른 곳으로 전송되지 않습니다.</p>
+          <p>• API 사용량만큼 본인 계정에 요금이 부과됩니다.</p>
+          <p>• Claude 화면 안에서 열면 외부 연결이 막혀 있어요. API 모드는 저장된 HTML 파일을 크롬 등 브라우저로 직접 열어 사용하세요. 키가 없어도 [샘플 생성]과 [프롬프트 복사·붙여넣기]는 그대로 쓸 수 있습니다.</p>
+        </div>
+      </div>
+    </Modal>}
+    {modal && modal.type === 'confirm' && <Modal title={modal.title} onClose={() => setModal(null)}
+      footer={<><button className="btn btn-o" onClick={() => { setModal(null); modal.onCancel && modal.onCancel(); }}>{modal.cancelText || '취소'}</button><button className="btn btn-p" onClick={() => { setModal(null); modal.onOk(); }}>{modal.okText || '확인'}</button></>}>
+      <p className="flex gap-2 leading-relaxed"><Icon n="alert" s={20} c="text-[#E8890C] shrink-0 mt-0.5" />{modal.msg}</p>
+    </Modal>}
+
+    {toast && <div key={toast.id} className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 rounded-xl shadow-lg text-sm font-bold text-white fade-in max-w-[92vw] ${toast.kind === 'err' ? 'bg-[#E5484D]' : 'bg-[#1F2330]'}`}>{toast.kind !== 'err' && <span className="text-[#22B573] mr-1.5">✓</span>}{toast.msg}</div>}
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
